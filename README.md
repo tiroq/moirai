@@ -23,6 +23,22 @@ Build a local snapshot release with GoReleaser:
 goreleaser release --snapshot --clean
 ```
 
+## CI (local)
+
+Run the full CI suite locally:
+
+```
+task ci
+```
+
+## Release (publish)
+
+Tag and push a release:
+
+```
+git tag v0.1.0 && git push origin v0.1.0
+```
+
 ## Basic usage
 
 List available profiles and show the active one:
