@@ -18,6 +18,7 @@ import (
 
 const modelsCacheTTL = 24 * time.Hour
 const modelsLoadBudget = 50 * time.Millisecond
+const modelPageSize = 10
 
 func (m model) viewModels() string {
 	var b strings.Builder
@@ -26,7 +27,10 @@ func (m model) viewModels() string {
 	if len(m.modelFiltered) == 0 {
 		b.WriteString("  (none)\n")
 	} else {
-		for i, modelName := range m.modelFiltered {
+		start, end := modelWindow(len(m.modelFiltered), m.modelSelected, modelPageSize)
+		fmt.Fprintf(&b, "Showing %d-%d of %d\n\n", start+1, end, len(m.modelFiltered))
+		for i := start; i < end; i++ {
+			modelName := m.modelFiltered[i]
 			prefix := "  "
 			if i == m.modelSelected {
 				prefix = "> "
@@ -55,6 +59,12 @@ func (m model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyEnter:
 		return m.selectModel()
+	case tea.KeyPgUp:
+		m.moveModelSelection(-modelPageSize)
+		return m, nil
+	case tea.KeyPgDown:
+		m.moveModelSelection(modelPageSize)
+		return m, nil
 	case tea.KeyBackspace, tea.KeyDelete:
 		if m.modelSearch != "" {
 			runes := []rune(m.modelSearch)
@@ -126,6 +136,24 @@ func (m *model) moveModelSelection(delta int) {
 	if m.modelSelected >= len(m.modelFiltered) {
 		m.modelSelected = len(m.modelFiltered) - 1
 	}
+}
+
+func modelWindow(total, selected, pageSize int) (start, end int) {
+	if total <= 0 || pageSize <= 0 {
+		return 0, 0
+	}
+	if selected < 0 {
+		selected = 0
+	}
+	if selected >= total {
+		selected = total - 1
+	}
+	start = (selected / pageSize) * pageSize
+	end = start + pageSize
+	if end > total {
+		end = total
+	}
+	return start, end
 }
 
 func filterModelList(models []string, query string) []string {
