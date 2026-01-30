@@ -9,3 +9,9 @@ linters:
     - ineffassign
     - unused
     - revive
+
+issues:
+  exclude-rules:
+    - linters:
+        - revive
+      text: "exported:"

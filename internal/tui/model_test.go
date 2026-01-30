@@ -58,7 +58,7 @@ func TestProfilesApplyTriggersApply(t *testing.T) {
 		}
 		return nil
 	}
-	actions.activeProfile = func(dir string) (string, bool, error) {
+	actions.activeProfile = func(_ string) (string, bool, error) {
 		return "beta", true, nil
 	}
 
@@ -85,10 +85,10 @@ func TestApplyRefreshesActiveProfile(t *testing.T) {
 
 	refreshed := false
 	actions := stubActions()
-	actions.applyProfile = func(dir, profileName string) error {
+	actions.applyProfile = func(_, _ string) error {
 		return nil
 	}
-	actions.activeProfile = func(dir string) (string, bool, error) {
+	actions.activeProfile = func(_ string) (string, bool, error) {
 		refreshed = true
 		return "alpha", true, nil
 	}
@@ -114,7 +114,7 @@ func TestBackupsScreenUsesListAndHandlesEmpty(t *testing.T) {
 
 	called := false
 	actions := stubActions()
-	actions.listProfileBackups = func(dir, profileName string) ([]string, error) {
+	actions.listProfileBackups = func(_ string, profileName string) ([]string, error) {
 		called = true
 		if profileName != "alpha" {
 			t.Fatalf("expected profile alpha, got %q", profileName)
@@ -148,7 +148,7 @@ func TestDiffScreenNoBackupsMessage(t *testing.T) {
 	}
 
 	actions := stubActions()
-	actions.diffAgainstLastBackup = func(dir, profileName string) (string, bool, error) {
+	actions.diffAgainstLastBackup = func(_, _ string) (string, bool, error) {
 		return "", false, nil
 	}
 
@@ -180,28 +180,28 @@ func TestModelUpdateQuit(t *testing.T) {
 
 func stubActions() modelActions {
 	return modelActions{
-		applyProfile: func(dir, profileName string) error {
+		applyProfile: func(_, _ string) error {
 			return nil
 		},
-		listProfileBackups: func(dir, profileName string) ([]string, error) {
+		listProfileBackups: func(_, _ string) ([]string, error) {
 			return nil, nil
 		},
-		activeProfile: func(dir string) (string, bool, error) {
+		activeProfile: func(_ string) (string, bool, error) {
 			return "", false, nil
 		},
-		diffAgainstLastBackup: func(dir, profileName string) (string, bool, error) {
+		diffAgainstLastBackup: func(_, _ string) (string, bool, error) {
 			return "", true, nil
 		},
-		diffBetweenProfiles: func(dir, profileA, profileB string) (string, error) {
+		diffBetweenProfiles: func(_, _, _ string) (string, error) {
 			return "", nil
 		},
-		loadProfile: func(path string) (*profile.RootConfig, error) {
+		loadProfile: func(_ string) (*profile.RootConfig, error) {
 			return &profile.RootConfig{}, nil
 		},
-		saveProfile: func(path string, cfg *profile.RootConfig) error {
+		saveProfile: func(_ string, _ *profile.RootConfig) error {
 			return nil
 		},
-		backupProfile: func(dir, profileName string) (string, error) {
+		backupProfile: func(_, _ string) (string, error) {
 			return "", nil
 		},
 		applyAutofill: func(cfg *profile.RootConfig, knownAgents []string, preset profile.Preset) bool {

@@ -44,7 +44,7 @@ func TestRunInvokesProgramRunner(t *testing.T) {
 	})
 
 	called := false
-	programRunner = func(m tea.Model) error {
+	programRunner = func(_ tea.Model) error {
 		called = true
 		return nil
 	}

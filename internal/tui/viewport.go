@@ -64,14 +64,14 @@ func (v *diffViewport) clamp() {
 		v.y = 0
 		return
 	}
-	max := len(v.lines) - v.height
-	if max < 0 {
-		max = 0
+	maxY := len(v.lines) - v.height
+	if maxY < 0 {
+		maxY = 0
 	}
 	if v.y < 0 {
 		v.y = 0
 	}
-	if v.y > max {
-		v.y = max
+	if v.y > maxY {
+		v.y = maxY
 	}
 }

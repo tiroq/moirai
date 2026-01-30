@@ -105,7 +105,7 @@ func TestModelPickerSelectionUpdatesConfigAndMarksDirty(t *testing.T) {
 	}
 
 	actions := stubActions()
-	actions.loadProfile = func(path string) (*profile.RootConfig, error) {
+	actions.loadProfile = func(_ string) (*profile.RootConfig, error) {
 		return cfg, nil
 	}
 	actions.loadModels = func() []string {
@@ -152,7 +152,7 @@ func TestAgentsSaveBacksUpWritesAndClearsDirty(t *testing.T) {
 
 	var backupCalls, saveCalls int
 	actions := stubActions()
-	actions.loadProfile = func(path string) (*profile.RootConfig, error) { return cfg, nil }
+	actions.loadProfile = func(_ string) (*profile.RootConfig, error) { return cfg, nil }
 	actions.backupProfile = func(dir, profileName string) (string, error) {
 		backupCalls++
 		if dir != "/config" || profileName != "alpha" {
@@ -216,10 +216,10 @@ func TestAgentsAutofillDisabledShowsMessageAndDoesNotWrite(t *testing.T) {
 
 	var backupCalls, saveCalls, autofillCalls int
 	actions := stubActions()
-	actions.loadProfile = func(path string) (*profile.RootConfig, error) { return cfg, nil }
-	actions.backupProfile = func(dir, profileName string) (string, error) { backupCalls++; return "", nil }
-	actions.saveProfile = func(path string, gotCfg *profile.RootConfig) error { saveCalls++; return nil }
-	actions.applyAutofill = func(cfg *profile.RootConfig, knownAgents []string, preset profile.Preset) bool {
+	actions.loadProfile = func(_ string) (*profile.RootConfig, error) { return cfg, nil }
+	actions.backupProfile = func(_, _ string) (string, error) { backupCalls++; return "", nil }
+	actions.saveProfile = func(_ string, _ *profile.RootConfig) error { saveCalls++; return nil }
+	actions.applyAutofill = func(_ *profile.RootConfig, _ []string, _ profile.Preset) bool {
 		autofillCalls++
 		return false
 	}
@@ -255,9 +255,9 @@ func TestAgentsAutofillEnabledFillsAndSaves(t *testing.T) {
 
 	var backupCalls, saveCalls, autofillCalls int
 	actions := stubActions()
-	actions.loadProfile = func(path string) (*profile.RootConfig, error) { return cfg, nil }
-	actions.backupProfile = func(dir, profileName string) (string, error) { backupCalls++; return "", nil }
-	actions.saveProfile = func(path string, gotCfg *profile.RootConfig) error { saveCalls++; return nil }
+	actions.loadProfile = func(_ string) (*profile.RootConfig, error) { return cfg, nil }
+	actions.backupProfile = func(_, _ string) (string, error) { backupCalls++; return "", nil }
+	actions.saveProfile = func(_ string, _ *profile.RootConfig) error { saveCalls++; return nil }
 	actions.applyAutofill = func(cfg *profile.RootConfig, knownAgents []string, preset profile.Preset) bool {
 		autofillCalls++
 		return profile.ApplyAutofill(cfg, knownAgents, preset)
@@ -296,4 +296,3 @@ func TestAgentsAutofillEnabledFillsAndSaves(t *testing.T) {
 		t.Fatalf("expected sisyphus to be filled")
 	}
 }
-

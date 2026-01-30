@@ -7,7 +7,7 @@ import (
 
 func (m model) viewDiff() string {
 	var b strings.Builder
-	title := "Diff"
+	var title string
 	switch m.diffMode {
 	case diffModeActiveProfile:
 		if m.diffAgainst != "" {

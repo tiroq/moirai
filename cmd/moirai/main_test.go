@@ -65,7 +65,7 @@ func TestRunSkipsTUIWhenArgsExist(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	called := false
-	stub := func(config app.AppConfig) error {
+	stub := func(_ app.AppConfig) error {
 		called = true
 		return nil
 	}
