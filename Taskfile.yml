@@ -2,7 +2,7 @@ version: '3'
 
 shell: bash
 
-Tasks:
+tasks:
   default:
     desc: Show available tasks
     cmds:
@@ -12,7 +12,11 @@ Tasks:
     cmds:
       - |
         set -euo pipefail
-        files=$(rg --files -g '*.go')
+        if command -v rg >/dev/null 2>&1; then
+          files=$(rg --files -g '*.go')
+        else
+          files=$(find . -type f -name '*.go')
+        fi
         if [ -z "$files" ]; then
           exit 0
         fi
@@ -23,7 +27,11 @@ Tasks:
     cmds:
       - |
         set -euo pipefail
-        files=$(rg --files -g '*.go')
+        if command -v rg >/dev/null 2>&1; then
+          files=$(rg --files -g '*.go')
+        else
+          files=$(find . -type f -name '*.go')
+        fi
         if [ -z "$files" ]; then
           exit 0
         fi
