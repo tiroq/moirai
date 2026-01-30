@@ -135,7 +135,7 @@ tasks:
         ./scripts/release-bump.sh "$VERSION"
 
   release:publish:
-    desc: Publish prepared release tag (push to origin; VERSION=vX.Y.Z)
+    desc: Publish release tag (push to origin; VERSION=vX.Y.Z or BUMP=patch|minor|major)
     cmds:
       - |
         set -euo pipefail
@@ -146,6 +146,16 @@ tasks:
               sort -V |
               tail -n 1 || true
           )
+          if [ -z "${VERSION:-}" ]; then
+            BUMP="${BUMP:-patch}"
+            ./scripts/release-bump.sh "$BUMP"
+            VERSION=$(
+              git tag --points-at HEAD |
+                grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+                sort -V |
+                tail -n 1 || true
+            )
+          fi
         fi
-        : "${VERSION:?VERSION is required (e.g. VERSION=v0.1.0) or tag HEAD with vX.Y.Z}"
+        : "${VERSION:?VERSION is required (e.g. VERSION=v0.1.0)}"
         ./scripts/release-publish.sh "$VERSION"
