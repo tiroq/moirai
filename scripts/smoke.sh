@@ -69,10 +69,14 @@ if [ ! -f "$backup_path" ]; then
   fail "backup file missing: $backup_path"
 fi
 backup_base=$(basename "$backup_path")
-case "$backup_base" in
-  oh-my-opencode.json.beta.bak.*) ;;
-  *) fail "backup name unexpected: $backup_base" ;;
-esac
+if [[ ! "$backup_base" =~ ^oh-my-opencode\.json\.beta\.bak\.[0-9]{8}-[0-9]{6}(-[0-9]+)?$ ]]; then
+  fail "backup name unexpected: $backup_base"
+fi
+
+post_backup_list=$("$bin_path" list)
+printf '%s\n' "$post_backup_list" | grep -qF " - alpha" || fail "list missing alpha after backup"
+printf '%s\n' "$post_backup_list" | grep -qF " - beta" || fail "list missing beta after backup"
+printf '%s\n' "$post_backup_list" | grep -qF "$backup_base" && fail "list should not include backup files"
 
 set +e
 "$bin_path" diff beta --against last-backup >/dev/null
@@ -93,11 +97,18 @@ fi
 if [ ! -f "$pre_backup_path" ]; then
   fail "pre-restore backup missing: $pre_backup_path"
 fi
+if [ "$pre_backup_path" = "$backup_path" ]; then
+  fail "pre-restore backup overwrote source backup: $pre_backup_path"
+fi
 pre_backup_base=$(basename "$pre_backup_path")
-case "$pre_backup_base" in
-  oh-my-opencode.json.beta.bak.*) ;;
-  *) fail "pre-restore backup name unexpected: $pre_backup_base" ;;
-esac
+if [[ ! "$pre_backup_base" =~ ^oh-my-opencode\.json\.beta\.bak\.[0-9]{8}-[0-9]{6}(-[0-9]+)?$ ]]; then
+  fail "pre-restore backup name unexpected: $pre_backup_base"
+fi
+
+pre_backup_content=$(cat "$pre_backup_path")
+if [ "$pre_backup_content" != "$beta_modified" ]; then
+  fail "pre-restore backup content mismatch"
+fi
 
 restored_content=$(cat "$beta_path")
 if [ "$restored_content" != "$beta_content" ]; then

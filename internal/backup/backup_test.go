@@ -57,6 +57,54 @@ func TestBackupProfileCopiesContent(t *testing.T) {
 	}
 }
 
+func TestBackupProfileAvoidsOverwriteOnTimestampCollision(t *testing.T) {
+	oldTimestamp := timestamp
+	timestamp = func() string { return "20240101-000000" }
+	t.Cleanup(func() { timestamp = oldTimestamp })
+
+	dir := t.TempDir()
+	profileName := "collision"
+	profileFile := filepath.Join(dir, profilePrefix+profileName)
+
+	if err := os.WriteFile(profileFile, []byte("first"), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	firstBackup, err := BackupProfile(dir, profileName)
+	if err != nil {
+		t.Fatalf("BackupProfile(1): %v", err)
+	}
+
+	if err := os.WriteFile(profileFile, []byte("second"), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	secondBackup, err := BackupProfile(dir, profileName)
+	if err != nil {
+		t.Fatalf("BackupProfile(2): %v", err)
+	}
+
+	if firstBackup == secondBackup {
+		t.Fatalf("expected distinct backup paths, got %q", firstBackup)
+	}
+
+	firstContent, err := os.ReadFile(firstBackup)
+	if err != nil {
+		t.Fatalf("read first backup: %v", err)
+	}
+	if string(firstContent) != "first" {
+		t.Fatalf("first backup content mismatch: %q", string(firstContent))
+	}
+
+	secondContent, err := os.ReadFile(secondBackup)
+	if err != nil {
+		t.Fatalf("read second backup: %v", err)
+	}
+	if string(secondContent) != "second" {
+		t.Fatalf("second backup content mismatch: %q", string(secondContent))
+	}
+}
+
 func TestListProfileBackupsNewestFirst(t *testing.T) {
 	dir := t.TempDir()
 	profileName := "gamma"
@@ -357,5 +405,60 @@ func TestRestoreProfileFromBackupWithAbsolutePath(t *testing.T) {
 	}
 	if string(updated) != string(restored) {
 		t.Fatalf("profile content mismatch: %q", string(updated))
+	}
+}
+
+func TestRestoreProfileFromBackupAvoidsOverwritingSourceBackupOnCollision(t *testing.T) {
+	oldTimestamp := timestamp
+	timestamp = func() string { return "20240101-000000" }
+	t.Cleanup(func() { timestamp = oldTimestamp })
+
+	dir := t.TempDir()
+	profileName := "restore-collision"
+	profilePath := filepath.Join(dir, profilePrefix+profileName)
+
+	if err := os.WriteFile(profilePath, []byte("from-backup"), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	backupPath, err := BackupProfile(dir, profileName)
+	if err != nil {
+		t.Fatalf("BackupProfile: %v", err)
+	}
+
+	if err := os.WriteFile(profilePath, []byte("modified"), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	preBackupPath, err := RestoreProfileFromBackup(dir, profileName, backupPath)
+	if err != nil {
+		t.Fatalf("RestoreProfileFromBackup: %v", err)
+	}
+	if preBackupPath == backupPath {
+		t.Fatalf("expected pre-backup path to differ from source backup path")
+	}
+
+	preBackupContent, err := os.ReadFile(preBackupPath)
+	if err != nil {
+		t.Fatalf("read pre-backup: %v", err)
+	}
+	if string(preBackupContent) != "modified" {
+		t.Fatalf("pre-backup content mismatch: %q", string(preBackupContent))
+	}
+
+	profileContent, err := os.ReadFile(profilePath)
+	if err != nil {
+		t.Fatalf("read profile: %v", err)
+	}
+	if string(profileContent) != "from-backup" {
+		t.Fatalf("restored profile content mismatch: %q", string(profileContent))
+	}
+
+	sourceBackupContent, err := os.ReadFile(backupPath)
+	if err != nil {
+		t.Fatalf("read source backup: %v", err)
+	}
+	if string(sourceBackupContent) != "from-backup" {
+		t.Fatalf("source backup content mismatch: %q", string(sourceBackupContent))
 	}
 }
