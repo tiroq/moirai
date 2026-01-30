@@ -126,7 +126,28 @@ func (m model) selectModel() (tea.Model, tea.Cmd) {
 	}
 	m.updateAgentsEntries()
 	m.screen = screenAgents
-	return m, nil
+	if !changed {
+		return m, nil
+	}
+
+	if m.agentsProfile.Name == "" || m.agentsProfile.Path == "" {
+		m.setStatus(statusKindError, "No profile loaded.")
+		return m, nil
+	}
+	cfg := m.agentsConfig
+	profileName := m.agentsProfile.Name
+	profilePath := m.agentsProfile.Path
+	configDir := m.configDir
+	m.setStatus(statusKindInfo, "Saving...")
+	return m, func() tea.Msg {
+		if _, err := m.actions.backupProfile(configDir, profileName); err != nil {
+			return agentsSaveMsg{err: err}
+		}
+		if err := m.actions.saveProfile(profilePath, cfg); err != nil {
+			return agentsSaveMsg{err: err}
+		}
+		return agentsSaveMsg{}
+	}
 }
 
 func (m *model) updateModelFilter() {

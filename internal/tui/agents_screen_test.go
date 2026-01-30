@@ -104,10 +104,13 @@ func TestModelPickerSelectionUpdatesConfigAndMarksDirty(t *testing.T) {
 		},
 	}
 
+	var backupCalls, saveCalls int
 	actions := stubActions()
 	actions.loadProfile = func(_ string) (*profile.RootConfig, error) {
 		return cfg, nil
 	}
+	actions.backupProfile = func(_, _ string) (string, error) { backupCalls++; return "/config/backup", nil }
+	actions.saveProfile = func(_ string, _ *profile.RootConfig) error { saveCalls++; return nil }
 	actions.loadModels = func() []string {
 		return []string{"gpt-4o-mini", "gpt-4o"}
 	}
@@ -131,16 +134,24 @@ func TestModelPickerSelectionUpdatesConfigAndMarksDirty(t *testing.T) {
 		t.Fatalf("expected target agent sisyphus, got %q", m.modelTargetAgent)
 	}
 
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected save cmd after model select")
+	}
+	msg = cmd()
+	updated, _ = updated.(model).Update(msg)
 	m = updated.(model)
 	if m.screen != screenAgents {
 		t.Fatalf("expected return to agents screen, got %v", m.screen)
 	}
-	if !m.agentsDirty {
-		t.Fatalf("expected dirty after model select")
+	if m.agentsDirty {
+		t.Fatalf("expected dirty cleared after auto-save")
 	}
 	if got := cfg.Agents["sisyphus"].Model; got != "gpt-4o-mini" {
 		t.Fatalf("expected model updated, got %q", got)
+	}
+	if backupCalls != 1 || saveCalls != 1 {
+		t.Fatalf("expected backup+save once, got backup=%d save=%d", backupCalls, saveCalls)
 	}
 }
 
