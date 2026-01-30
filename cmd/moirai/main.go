@@ -115,6 +115,29 @@ func main() {
 		if exitCode != 0 {
 			os.Exit(exitCode)
 		}
+	case "autofill":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Usage: moirai autofill <profile> --preset <preset>")
+			os.Exit(1)
+		}
+		autofillFlags := flag.NewFlagSet("autofill", flag.ContinueOnError)
+		preset := autofillFlags.String("preset", "", "autofill preset")
+		if err := autofillFlags.Parse(args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if *preset == "" {
+			fmt.Fprintln(os.Stderr, "Usage: moirai autofill <profile> --preset <preset>")
+			os.Exit(1)
+		}
+		exitCode, err := runAutofill(appConfig, args[1], *preset)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
 	default:
 		printHelp()
 		os.Exit(1)
@@ -159,6 +182,7 @@ func printHelp() {
 	fmt.Println("       moirai restore <profile> --from <backupPathOrFilename>")
 	fmt.Println("       moirai diff <profile> --against last-backup")
 	fmt.Println("       moirai diff --between <profileA> <profileB>")
+	fmt.Println("       moirai autofill <profile> --preset <preset>")
 	fmt.Println("Global options:")
 	fmt.Println("       --enable-autofill")
 	fmt.Println("       moirai help")
@@ -332,5 +356,44 @@ func runDiffBetween(config app.AppConfig, profileA, profileB string) (int, error
 		return 1, err
 	}
 	fmt.Print(diff)
+	return 0, nil
+}
+
+func runAutofill(config app.AppConfig, profileName, presetName string) (int, error) {
+	if !config.EnableAutofill {
+		fmt.Fprintln(os.Stderr, "Autofill is disabled. Enable with --enable-autofill or moirai.json.")
+		return 3, nil
+	}
+	if profileName == "" {
+		return 1, fmt.Errorf("profile name is required")
+	}
+
+	preset, ok := profile.PresetByName(presetName)
+	if !ok {
+		return 1, fmt.Errorf("unknown preset: %s", presetName)
+	}
+
+	profilePath := filepath.Join(config.ConfigDir, fmt.Sprintf("oh-my-opencode.json.%s", profileName))
+	cfg, err := profile.LoadProfile(profilePath)
+	if err != nil {
+		return 1, err
+	}
+
+	changed := profile.ApplyAutofill(cfg, profile.KnownAgents(), preset)
+	if !changed {
+		fmt.Printf("No changes needed for profile: %s\n", profileName)
+		return 0, nil
+	}
+
+	backupPath, err := backup.BackupProfile(config.ConfigDir, profileName)
+	if err != nil {
+		return 1, err
+	}
+	if err := profile.SaveProfileAtomic(profilePath, cfg); err != nil {
+		return 1, err
+	}
+
+	fmt.Printf("Autofilled: %s\n", profileName)
+	fmt.Printf("Backup: %s\n", backupPath)
 	return 0, nil
 }

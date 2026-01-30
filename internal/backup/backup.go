@@ -137,7 +137,7 @@ func RestoreProfileFromBackup(dir, profileName string, from string) (string, err
 	if err != nil {
 		return "", err
 	}
-	if err := profile.SaveProfileAtomic(profilePath, backupData, backupInfo.Mode().Perm()); err != nil {
+	if err := profile.SaveProfileDataAtomic(profilePath, backupData, backupInfo.Mode().Perm()); err != nil {
 		return "", err
 	}
 
