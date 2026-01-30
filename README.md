@@ -1,28 +1,43 @@
 # moirai
-Moirai — profile, backup and fate manager for oh-my-opencode configurations.
+Moirai is a CLI tool for managing oh-my-opencode configuration profiles. It discovers profile files, switches the active config by updating a symlink, and can help with backups and diffs so you can move between setups safely.
 
-## Developer workflow
+If you keep multiple oh-my-opencode profiles for different workflows, moirai gives you a small, focused interface to list and apply them without hand-editing files.
 
-Prerequisites:
-- Go
-- Task (https://taskfile.dev)
+## Installation
 
-Setup tools:
+Download the latest release from GitHub Releases, then install it manually:
 
 ```
-./scripts/tools.sh
+chmod +x moirai-<os>-<arch>
+mv moirai-<os>-<arch> /usr/local/bin/moirai
 ```
 
-Run checks:
+## Release (local snapshot)
+
+Build a local snapshot release with GoReleaser:
 
 ```
-task ci
+goreleaser release --snapshot --clean
 ```
 
-## Usage
+## Basic usage
 
 List available profiles and show the active one:
 
 ```
 moirai list
 ```
+
+Switch to a profile:
+
+```
+moirai apply <profile>
+```
+
+## Config location
+
+Moirai reads profiles from `~/.config/opencode/`.
+
+## Safety note
+
+Moirai treats the active config as a symlink to a profile file and uses backups when making changes. Review backups and symlinks before restoring or applying profiles.
