@@ -3,6 +3,10 @@ version: '3'
 shell: bash
 
 Tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
   fmt:
     desc: Format Go files
     cmds:
