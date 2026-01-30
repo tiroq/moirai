@@ -78,6 +78,18 @@ func ListProfileBackups(dir, profileName string) ([]string, error) {
 	return backups, nil
 }
 
+// LatestProfileBackup returns the newest backup name for a profile.
+func LatestProfileBackup(dir, profileName string) (string, bool, error) {
+	backups, err := ListProfileBackups(dir, profileName)
+	if err != nil {
+		return "", false, err
+	}
+	if len(backups) == 0 {
+		return "", false, nil
+	}
+	return backups[0], true, nil
+}
+
 // RestoreProfileFromBackup restores the profile file from a backup in dir.
 func RestoreProfileFromBackup(dir, profileName string, from string) (string, error) {
 	if profileName == "" {

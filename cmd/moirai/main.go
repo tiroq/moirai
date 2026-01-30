@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -82,6 +83,15 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "diff":
+		exitCode, err := runDiff(args[1:])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
 	default:
 		printHelp()
 		os.Exit(1)
@@ -95,6 +105,8 @@ func printHelp() {
 	fmt.Println("       moirai backup <profile>")
 	fmt.Println("       moirai backups <profile>")
 	fmt.Println("       moirai restore <profile> --from <backupPathOrFilename>")
+	fmt.Println("       moirai diff <profile> --against last-backup")
+	fmt.Println("       moirai diff --between <profileA> <profileB>")
 	fmt.Println("       moirai help")
 }
 
@@ -225,4 +237,94 @@ func runRestore(profileName, from string) error {
 	fmt.Printf("Restored: %s\n", profileName)
 	fmt.Printf("PreBackup: %s\n", preBackupPath)
 	return nil
+}
+
+func runDiff(args []string) (int, error) {
+	if len(args) == 0 {
+		printDiffHelp()
+		return 1, fmt.Errorf("missing diff arguments")
+	}
+	if args[0] == "--between" {
+		if len(args) != 3 {
+			printDiffHelp()
+			return 1, fmt.Errorf("Usage: moirai diff --between <profileA> <profileB>")
+		}
+		return runDiffBetween(args[1], args[2])
+	}
+
+	if len(args) < 2 {
+		printDiffHelp()
+		return 1, fmt.Errorf("Usage: moirai diff <profile> --against last-backup")
+	}
+	if args[1] != "--against" || len(args) != 3 || args[2] != "last-backup" {
+		printDiffHelp()
+		return 1, fmt.Errorf("Usage: moirai diff <profile> --against last-backup")
+	}
+	return runDiffAgainstLastBackup(args[0])
+}
+
+func printDiffHelp() {
+	fmt.Println("Usage: moirai diff <profile> --against last-backup")
+	fmt.Println("       moirai diff --between <profileA> <profileB>")
+}
+
+func runDiffAgainstLastBackup(profileName string) (int, error) {
+	configDir, err := util.ExpandUser(defaultConfigDir)
+	if err != nil {
+		return 1, err
+	}
+	configDir = filepath.Clean(configDir)
+
+	profilePath := filepath.Join(configDir, fmt.Sprintf("oh-my-opencode.json.%s", profileName))
+	if _, err := os.Stat(profilePath); err != nil {
+		return 1, err
+	}
+
+	backupName, ok, err := backup.LatestProfileBackup(configDir, profileName)
+	if err != nil {
+		return 1, err
+	}
+	if !ok {
+		fmt.Printf("No backups found for profile: %s\n", profileName)
+		return 2, nil
+	}
+	backupPath := filepath.Join(configDir, backupName)
+
+	diff, err := util.GitDiffNoIndex(backupPath, profilePath)
+	if err != nil {
+		if errors.Is(err, util.ErrGitNotAvailable) {
+			return 1, fmt.Errorf("git is required for diff: %w", err)
+		}
+		return 1, err
+	}
+	fmt.Print(diff)
+	return 0, nil
+}
+
+func runDiffBetween(profileA, profileB string) (int, error) {
+	configDir, err := util.ExpandUser(defaultConfigDir)
+	if err != nil {
+		return 1, err
+	}
+	configDir = filepath.Clean(configDir)
+
+	pathA := filepath.Join(configDir, fmt.Sprintf("oh-my-opencode.json.%s", profileA))
+	pathB := filepath.Join(configDir, fmt.Sprintf("oh-my-opencode.json.%s", profileB))
+
+	if _, err := os.Stat(pathA); err != nil {
+		return 1, err
+	}
+	if _, err := os.Stat(pathB); err != nil {
+		return 1, err
+	}
+
+	diff, err := util.GitDiffNoIndex(pathA, pathB)
+	if err != nil {
+		if errors.Is(err, util.ErrGitNotAvailable) {
+			return 1, fmt.Errorf("git is required for diff: %w", err)
+		}
+		return 1, err
+	}
+	fmt.Print(diff)
+	return 0, nil
 }

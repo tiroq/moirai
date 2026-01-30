@@ -121,6 +121,34 @@ func TestListProfileBackupsIgnoresOtherProfiles(t *testing.T) {
 	}
 }
 
+func TestLatestProfileBackupSelectsNewest(t *testing.T) {
+	dir := t.TempDir()
+	profileName := "latest-profile"
+	profilePath := filepath.Join(dir, profilePrefix+profileName)
+	if err := os.WriteFile(profilePath, []byte("profile"), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	oldBackup := profilePrefix + profileName + backupMarker + "20240101-000000"
+	newBackup := profilePrefix + profileName + backupMarker + "20240103-000000"
+	for _, name := range []string{oldBackup, newBackup} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("backup"), 0o600); err != nil {
+			t.Fatalf("write backup %s: %v", name, err)
+		}
+	}
+
+	got, ok, err := LatestProfileBackup(dir, profileName)
+	if err != nil {
+		t.Fatalf("LatestProfileBackup: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected latest backup")
+	}
+	if got != newBackup {
+		t.Fatalf("expected newest %s, got %s", newBackup, got)
+	}
+}
+
 func TestBackupProfileRequiresName(t *testing.T) {
 	if _, err := BackupProfile(t.TempDir(), ""); err == nil {
 		t.Fatal("expected error for empty profile name")
