@@ -250,7 +250,7 @@ func (m model) View() string {
 	}
 	body += "\n" + m.renderStatusBar()
 	title := renderTitleArt(m.width)
-	return title + "\n" + body + "\n"
+	return title + "\n\n" + body + "\n"
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -490,7 +490,8 @@ func (m model) selectedProfileInfo() (profile.ProfileInfo, bool) {
 
 func (m *model) resizeViewport() {
 	// Reserve title + status, plus 2 lines for the diff screen header spacing.
-	reserved := titleArtHeight() + 1 + 2
+	// We also add a blank line after the title art.
+	reserved := titleArtHeight() + 1 + 1 + 2
 	if m.height-reserved < 1 {
 		m.viewport.height = 1
 	} else {

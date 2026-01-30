@@ -35,7 +35,8 @@ func (m model) viewAgents() string {
 			if m.agentsDirty {
 				headerLines = 4
 			}
-			pageSize = m.height - (titleArtHeight() + 1) - headerLines
+			// Reserve title art + blank separator + status bar.
+			pageSize = m.height - (titleArtHeight()+2) - headerLines
 			if pageSize < 1 {
 				pageSize = 1
 			}

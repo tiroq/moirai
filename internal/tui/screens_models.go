@@ -33,7 +33,8 @@ func (m model) viewModels() string {
 			// Header lines:
 			//   "Model Picker", "Search", blank, "Showing"
 			headerLines := 4
-			available := m.height - (titleArtHeight() + 1) - headerLines
+			// Reserve title art + blank separator + status bar.
+			available := m.height - (titleArtHeight()+2) - headerLines
 			if available < 1 {
 				available = 1
 			}
