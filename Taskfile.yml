@@ -104,3 +104,32 @@ tasks:
       - task: vet
       - task: test
       - task: cover
+
+  release:patch:
+    desc: Create next patch release tag (local only)
+    cmds:
+      - |
+        set -euo pipefail
+        ./scripts/release-bump.sh patch
+
+  release:minor:
+    desc: Create next minor release tag (local only)
+    cmds:
+      - |
+        set -euo pipefail
+        ./scripts/release-bump.sh minor
+
+  release:major:
+    desc: Create next major release tag (local only)
+    cmds:
+      - |
+        set -euo pipefail
+        ./scripts/release-bump.sh major
+
+  release:tag:
+    desc: Create explicit release tag (local only; VERSION=vX.Y.Z)
+    cmds:
+      - |
+        set -euo pipefail
+        : "${VERSION:?VERSION is required (e.g. VERSION=v0.1.0)}"
+        ./scripts/release-bump.sh "$VERSION"
