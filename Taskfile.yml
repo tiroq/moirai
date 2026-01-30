@@ -139,5 +139,13 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        : "${VERSION:?VERSION is required (e.g. VERSION=v0.1.0)}"
+        if [ -z "${VERSION:-}" ]; then
+          VERSION=$(
+            git tag --points-at HEAD |
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+              sort -V |
+              tail -n 1 || true
+          )
+        fi
+        : "${VERSION:?VERSION is required (e.g. VERSION=v0.1.0) or tag HEAD with vX.Y.Z}"
         ./scripts/release-publish.sh "$VERSION"
