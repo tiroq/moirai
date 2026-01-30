@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
+	"moirai/internal/app"
 	"moirai/internal/backup"
 	"moirai/internal/link"
 	"moirai/internal/profile"
@@ -16,15 +19,35 @@ import (
 const defaultConfigDir = "~/.config/opencode"
 
 func main() {
-	args := os.Args[1:]
+	args, globalFlags, err := parseGlobalFlags(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
 		printHelp()
 		return
 	}
 
+	configDir, err := util.ExpandUser(defaultConfigDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	configDir = filepath.Clean(configDir)
+	var enableAutofillOverride *bool
+	if globalFlags.EnableAutofillSet {
+		enableAutofillOverride = &globalFlags.EnableAutofill
+	}
+	appConfig, err := app.LoadConfig(configDir, enableAutofillOverride)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
 	switch args[0] {
 	case "list":
-		if err := runList(); err != nil {
+		if err := runList(appConfig); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -33,7 +56,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Usage: moirai apply <profile>")
 			os.Exit(1)
 		}
-		if err := runApply(args[1]); err != nil {
+		if err := runApply(appConfig, args[1]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -42,7 +65,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Usage: moirai doctor <profile>")
 			os.Exit(1)
 		}
-		exitCode, err := runDoctor(args[1])
+		exitCode, err := runDoctor(appConfig, args[1])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -55,7 +78,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Usage: moirai backup <profile>")
 			os.Exit(1)
 		}
-		if err := runBackup(args[1]); err != nil {
+		if err := runBackup(appConfig, args[1]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -64,7 +87,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Usage: moirai backups <profile>")
 			os.Exit(1)
 		}
-		if err := runBackups(args[1]); err != nil {
+		if err := runBackups(appConfig, args[1]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -79,12 +102,12 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		if err := runRestore(args[1], *from); err != nil {
+		if err := runRestore(appConfig, args[1], *from); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	case "diff":
-		exitCode, err := runDiff(args[1:])
+		exitCode, err := runDiff(appConfig, args[1:])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -98,6 +121,35 @@ func main() {
 	}
 }
 
+type globalFlags struct {
+	EnableAutofill    bool
+	EnableAutofillSet bool
+}
+
+func parseGlobalFlags(args []string) ([]string, globalFlags, error) {
+	var flags globalFlags
+	remaining := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--enable-autofill" {
+			flags.EnableAutofill = true
+			flags.EnableAutofillSet = true
+			continue
+		}
+		if strings.HasPrefix(arg, "--enable-autofill=") {
+			value := strings.TrimPrefix(arg, "--enable-autofill=")
+			parsed, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, flags, fmt.Errorf("invalid value for --enable-autofill: %q", value)
+			}
+			flags.EnableAutofill = parsed
+			flags.EnableAutofillSet = true
+			continue
+		}
+		remaining = append(remaining, arg)
+	}
+	return remaining, flags, nil
+}
+
 func printHelp() {
 	fmt.Println("Usage: moirai list")
 	fmt.Println("       moirai apply <profile>")
@@ -107,27 +159,23 @@ func printHelp() {
 	fmt.Println("       moirai restore <profile> --from <backupPathOrFilename>")
 	fmt.Println("       moirai diff <profile> --against last-backup")
 	fmt.Println("       moirai diff --between <profileA> <profileB>")
+	fmt.Println("Global options:")
+	fmt.Println("       --enable-autofill")
 	fmt.Println("       moirai help")
 }
 
-func runList() error {
-	configDir, err := util.ExpandUser(defaultConfigDir)
-	if err != nil {
-		return err
-	}
-	configDir = filepath.Clean(configDir)
-
-	profiles, err := profile.DiscoverProfiles(configDir)
+func runList(config app.AppConfig) error {
+	profiles, err := profile.DiscoverProfiles(config.ConfigDir)
 	if err != nil {
 		return err
 	}
 
-	activeName, ok, err := link.ActiveProfile(configDir)
+	activeName, ok, err := link.ActiveProfile(config.ConfigDir)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("ConfigDir: %s\n", configDir)
+	fmt.Printf("ConfigDir: %s\n", config.ConfigDir)
 	if ok {
 		fmt.Printf("Active: %s\n", activeName)
 	} else {
@@ -144,28 +192,16 @@ func runList() error {
 	return nil
 }
 
-func runApply(profileName string) error {
-	configDir, err := util.ExpandUser(defaultConfigDir)
-	if err != nil {
-		return err
-	}
-	configDir = filepath.Clean(configDir)
-
-	if err := link.ApplyProfile(configDir, profileName); err != nil {
+func runApply(config app.AppConfig, profileName string) error {
+	if err := link.ApplyProfile(config.ConfigDir, profileName); err != nil {
 		return err
 	}
 	fmt.Printf("Applied: %s\n", profileName)
 	return nil
 }
 
-func runDoctor(profileName string) (int, error) {
-	configDir, err := util.ExpandUser(defaultConfigDir)
-	if err != nil {
-		return 1, err
-	}
-	configDir = filepath.Clean(configDir)
-
-	profilePath := filepath.Join(configDir, fmt.Sprintf("oh-my-opencode.json.%s", profileName))
+func runDoctor(config app.AppConfig, profileName string) (int, error) {
+	profilePath := filepath.Join(config.ConfigDir, fmt.Sprintf("oh-my-opencode.json.%s", profileName))
 	cfg, err := profile.LoadProfile(profilePath)
 	if err != nil {
 		return 1, err
@@ -185,14 +221,8 @@ func runDoctor(profileName string) (int, error) {
 	return 2, nil
 }
 
-func runBackup(profileName string) error {
-	configDir, err := util.ExpandUser(defaultConfigDir)
-	if err != nil {
-		return err
-	}
-	configDir = filepath.Clean(configDir)
-
-	backupPath, err := backup.BackupProfile(configDir, profileName)
+func runBackup(config app.AppConfig, profileName string) error {
+	backupPath, err := backup.BackupProfile(config.ConfigDir, profileName)
 	if err != nil {
 		return err
 	}
@@ -200,14 +230,8 @@ func runBackup(profileName string) error {
 	return nil
 }
 
-func runBackups(profileName string) error {
-	configDir, err := util.ExpandUser(defaultConfigDir)
-	if err != nil {
-		return err
-	}
-	configDir = filepath.Clean(configDir)
-
-	backups, err := backup.ListProfileBackups(configDir, profileName)
+func runBackups(config app.AppConfig, profileName string) error {
+	backups, err := backup.ListProfileBackups(config.ConfigDir, profileName)
 	if err != nil {
 		return err
 	}
@@ -223,14 +247,8 @@ func runBackups(profileName string) error {
 	return nil
 }
 
-func runRestore(profileName, from string) error {
-	configDir, err := util.ExpandUser(defaultConfigDir)
-	if err != nil {
-		return err
-	}
-	configDir = filepath.Clean(configDir)
-
-	preBackupPath, err := backup.RestoreProfileFromBackup(configDir, profileName, from)
+func runRestore(config app.AppConfig, profileName, from string) error {
+	preBackupPath, err := backup.RestoreProfileFromBackup(config.ConfigDir, profileName, from)
 	if err != nil {
 		return err
 	}
@@ -239,7 +257,7 @@ func runRestore(profileName, from string) error {
 	return nil
 }
 
-func runDiff(args []string) (int, error) {
+func runDiff(config app.AppConfig, args []string) (int, error) {
 	if len(args) == 0 {
 		printDiffHelp()
 		return 1, fmt.Errorf("missing diff arguments")
@@ -249,7 +267,7 @@ func runDiff(args []string) (int, error) {
 			printDiffHelp()
 			return 1, fmt.Errorf("Usage: moirai diff --between <profileA> <profileB>")
 		}
-		return runDiffBetween(args[1], args[2])
+		return runDiffBetween(config, args[1], args[2])
 	}
 
 	if len(args) < 2 {
@@ -260,7 +278,7 @@ func runDiff(args []string) (int, error) {
 		printDiffHelp()
 		return 1, fmt.Errorf("Usage: moirai diff <profile> --against last-backup")
 	}
-	return runDiffAgainstLastBackup(args[0])
+	return runDiffAgainstLastBackup(config, args[0])
 }
 
 func printDiffHelp() {
@@ -268,19 +286,13 @@ func printDiffHelp() {
 	fmt.Println("       moirai diff --between <profileA> <profileB>")
 }
 
-func runDiffAgainstLastBackup(profileName string) (int, error) {
-	configDir, err := util.ExpandUser(defaultConfigDir)
-	if err != nil {
-		return 1, err
-	}
-	configDir = filepath.Clean(configDir)
-
-	profilePath := filepath.Join(configDir, fmt.Sprintf("oh-my-opencode.json.%s", profileName))
+func runDiffAgainstLastBackup(config app.AppConfig, profileName string) (int, error) {
+	profilePath := filepath.Join(config.ConfigDir, fmt.Sprintf("oh-my-opencode.json.%s", profileName))
 	if _, err := os.Stat(profilePath); err != nil {
 		return 1, err
 	}
 
-	backupName, ok, err := backup.LatestProfileBackup(configDir, profileName)
+	backupName, ok, err := backup.LatestProfileBackup(config.ConfigDir, profileName)
 	if err != nil {
 		return 1, err
 	}
@@ -288,7 +300,7 @@ func runDiffAgainstLastBackup(profileName string) (int, error) {
 		fmt.Printf("No backups found for profile: %s\n", profileName)
 		return 2, nil
 	}
-	backupPath := filepath.Join(configDir, backupName)
+	backupPath := filepath.Join(config.ConfigDir, backupName)
 
 	diff, err := util.GitDiffNoIndex(backupPath, profilePath)
 	if err != nil {
@@ -301,15 +313,9 @@ func runDiffAgainstLastBackup(profileName string) (int, error) {
 	return 0, nil
 }
 
-func runDiffBetween(profileA, profileB string) (int, error) {
-	configDir, err := util.ExpandUser(defaultConfigDir)
-	if err != nil {
-		return 1, err
-	}
-	configDir = filepath.Clean(configDir)
-
-	pathA := filepath.Join(configDir, fmt.Sprintf("oh-my-opencode.json.%s", profileA))
-	pathB := filepath.Join(configDir, fmt.Sprintf("oh-my-opencode.json.%s", profileB))
+func runDiffBetween(config app.AppConfig, profileA, profileB string) (int, error) {
+	pathA := filepath.Join(config.ConfigDir, fmt.Sprintf("oh-my-opencode.json.%s", profileA))
+	pathB := filepath.Join(config.ConfigDir, fmt.Sprintf("oh-my-opencode.json.%s", profileB))
 
 	if _, err := os.Stat(pathA); err != nil {
 		return 1, err
