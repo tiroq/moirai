@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,6 +24,10 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if shouldPrintVersion(args, globalFlags) {
+		printVersion(os.Stdout)
+		return
 	}
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
 		printHelp()
@@ -147,6 +152,7 @@ func main() {
 type globalFlags struct {
 	EnableAutofill    bool
 	EnableAutofillSet bool
+	ShowVersion       bool
 }
 
 func parseGlobalFlags(args []string) ([]string, globalFlags, error) {
@@ -168,6 +174,10 @@ func parseGlobalFlags(args []string) ([]string, globalFlags, error) {
 			flags.EnableAutofillSet = true
 			continue
 		}
+		if arg == "--version" {
+			flags.ShowVersion = true
+			continue
+		}
 		remaining = append(remaining, arg)
 	}
 	return remaining, flags, nil
@@ -183,9 +193,22 @@ func printHelp() {
 	fmt.Println("       moirai diff <profile> --against last-backup")
 	fmt.Println("       moirai diff --between <profileA> <profileB>")
 	fmt.Println("       moirai autofill <profile> --preset <preset>")
+	fmt.Println("       moirai version")
 	fmt.Println("Global options:")
 	fmt.Println("       --enable-autofill")
+	fmt.Println("       --version")
 	fmt.Println("       moirai help")
+}
+
+func shouldPrintVersion(args []string, flags globalFlags) bool {
+	if flags.ShowVersion {
+		return true
+	}
+	return len(args) > 0 && args[0] == "version"
+}
+
+func printVersion(w io.Writer) {
+	fmt.Fprintln(w, app.Version)
 }
 
 func runList(config app.AppConfig) error {
