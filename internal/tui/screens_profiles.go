@@ -40,7 +40,7 @@ func (m model) viewProfiles() string {
 		b.WriteString(hintStyle.Render(m.status))
 		b.WriteString("\n")
 	}
-	b.WriteString(hintStyle.Render("enter apply · b backups · d diff · q/esc/ctrl+c quit · j/k/arrows move"))
+	b.WriteString(hintStyle.Render("enter apply · e agents · b backups · d diff · q/esc/ctrl+c quit · j/k/arrows move"))
 	b.WriteString("\n")
 
 	return b.String()

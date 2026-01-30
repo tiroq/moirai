@@ -14,6 +14,8 @@ const (
 	screenProfiles screenID = iota
 	screenBackups
 	screenDiff
+	screenAgents
+	screenModels
 )
 
 type diffMode int
@@ -25,6 +27,7 @@ const (
 
 type model struct {
 	configDir  string
+	enableAutofill bool
 	profiles   []profile.ProfileInfo
 	activeName string
 	hasActive  bool
@@ -48,6 +51,19 @@ type model struct {
 	height int
 
 	actions modelActions
+
+	agentsProfile  profile.ProfileInfo
+	agentsConfig   *profile.RootConfig
+	agentsEntries  []agentEntry
+	agentsSelected int
+	agentsDirty    bool
+	agentsStatus   string
+
+	modelSearch      string
+	modelAll         []string
+	modelFiltered    []string
+	modelSelected    int
+	modelTargetAgent string
 }
 
 type applyResultMsg struct {
@@ -70,11 +86,28 @@ type diffResultMsg struct {
 	err       error
 }
 
-func newModel(configDir string, profiles []profile.ProfileInfo, activeName string, hasActive bool) model {
-	return newModelWithActions(configDir, profiles, activeName, hasActive, defaultActions())
+type agentsLoadMsg struct {
+	profile profile.ProfileInfo
+	cfg     *profile.RootConfig
+	err     error
 }
 
-func newModelWithActions(configDir string, profiles []profile.ProfileInfo, activeName string, hasActive bool, actions modelActions) model {
+type agentsSaveMsg struct {
+	err error
+}
+
+type agentsAutofillMsg struct {
+	filled  int
+	changed bool
+	saved   bool
+	err     error
+}
+
+func newModel(configDir string, enableAutofill bool, profiles []profile.ProfileInfo, activeName string, hasActive bool) model {
+	return newModelWithActions(configDir, enableAutofill, profiles, activeName, hasActive, defaultActions())
+}
+
+func newModelWithActions(configDir string, enableAutofill bool, profiles []profile.ProfileInfo, activeName string, hasActive bool, actions modelActions) model {
 	selected := -1
 	if len(profiles) > 0 {
 		selected = 0
@@ -91,6 +124,7 @@ func newModelWithActions(configDir string, profiles []profile.ProfileInfo, activ
 	actions = normalizeActions(actions)
 	m := model{
 		configDir:  configDir,
+		enableAutofill: enableAutofill,
 		profiles:   profiles,
 		activeName: activeName,
 		hasActive:  hasActive,
@@ -122,6 +156,21 @@ func normalizeActions(actions modelActions) modelActions {
 	if actions.diffBetweenProfiles == nil {
 		actions.diffBetweenProfiles = defaults.diffBetweenProfiles
 	}
+	if actions.loadProfile == nil {
+		actions.loadProfile = defaults.loadProfile
+	}
+	if actions.saveProfile == nil {
+		actions.saveProfile = defaults.saveProfile
+	}
+	if actions.backupProfile == nil {
+		actions.backupProfile = defaults.backupProfile
+	}
+	if actions.applyAutofill == nil {
+		actions.applyAutofill = defaults.applyAutofill
+	}
+	if actions.loadModels == nil {
+		actions.loadModels = defaults.loadModels
+	}
 	return actions
 }
 
@@ -141,6 +190,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleBackupsResult(msg)
 	case diffResultMsg:
 		return m.handleDiffResult(msg)
+	case agentsLoadMsg:
+		return m.handleAgentsLoad(msg)
+	case agentsSaveMsg:
+		return m.handleAgentsSave(msg)
+	case agentsAutofillMsg:
+		return m.handleAgentsAutofill(msg)
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -153,6 +208,10 @@ func (m model) View() string {
 		return m.viewBackups()
 	case screenDiff:
 		return m.viewDiff()
+	case screenAgents:
+		return m.viewAgents()
+	case screenModels:
+		return m.viewModels()
 	default:
 		return m.viewProfiles()
 	}
@@ -178,6 +237,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.moveSelection(-1)
 		case "enter":
 			return m.applySelected()
+		case "e":
+			return m.openAgents()
 		case "b":
 			return m.openBackups()
 		case "d":
@@ -210,6 +271,27 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.openDiff(diffModeLastBackup)
 		}
 		return m, nil
+	case screenAgents:
+		switch key {
+		case "j", "down":
+			m.agentsStatus = ""
+			m.moveAgentsSelection(1)
+		case "k", "up":
+			m.agentsStatus = ""
+			m.moveAgentsSelection(-1)
+		case "enter":
+			return m.openModelPicker()
+		case "s":
+			return m.saveAgents()
+		case "r":
+			return m.reloadAgents()
+		case "a":
+			return m.autofillAgents()
+		case "esc":
+			m.screen = screenProfiles
+		}
+	case screenModels:
+		return m.handleModelPickerKey(msg)
 	}
 
 	return m, nil
@@ -357,6 +439,13 @@ func (m model) selectedProfile() (string, bool) {
 		return "", false
 	}
 	return m.profiles[m.selected].Name, true
+}
+
+func (m model) selectedProfileInfo() (profile.ProfileInfo, bool) {
+	if m.selected < 0 || m.selected >= len(m.profiles) {
+		return profile.ProfileInfo{}, false
+	}
+	return m.profiles[m.selected], true
 }
 
 func (m *model) resizeViewport() {

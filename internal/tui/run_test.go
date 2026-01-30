@@ -50,8 +50,7 @@ func TestRunInvokesProgramRunner(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	_, err := Run(app.AppConfig{ConfigDir: dir})
-	if err != nil {
+	if err := Run(app.AppConfig{ConfigDir: dir}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if !called {

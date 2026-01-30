@@ -32,5 +32,5 @@ func loadModel(config app.AppConfig) (model, error) {
 	if err != nil {
 		return model{}, err
 	}
-	return newModel(config.ConfigDir, profiles, activeName, ok), nil
+	return newModel(config.ConfigDir, config.EnableAutofill, profiles, activeName, ok), nil
 }

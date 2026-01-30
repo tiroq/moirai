@@ -12,6 +12,11 @@ type modelActions struct {
 	activeProfile         func(dir string) (string, bool, error)
 	diffAgainstLastBackup func(dir, profileName string) (string, bool, error)
 	diffBetweenProfiles   func(dir, profileA, profileB string) (string, error)
+	loadProfile           func(path string) (*profile.RootConfig, error)
+	saveProfile           func(path string, cfg *profile.RootConfig) error
+	backupProfile         func(dir, profileName string) (string, error)
+	applyAutofill         func(cfg *profile.RootConfig, knownAgents []string, preset profile.Preset) bool
+	loadModels            func() []string
 }
 
 func defaultActions() modelActions {
@@ -21,6 +26,11 @@ func defaultActions() modelActions {
 		activeProfile:         link.ActiveProfile,
 		diffAgainstLastBackup: diffAgainstLastBackup,
 		diffBetweenProfiles:   profile.DiffProfiles,
+		loadProfile:           profile.LoadProfile,
+		saveProfile:           profile.SaveProfileAtomic,
+		backupProfile:         backup.BackupProfile,
+		applyAutofill:         profile.ApplyAutofill,
+		loadModels:            loadModelList,
 	}
 }
 

@@ -14,7 +14,7 @@ func TestNewModelSelectsActive(t *testing.T) {
 		{Name: "alpha"},
 		{Name: "beta"},
 	}
-	m := newModel("/config", profiles, "beta", true)
+	m := newModel("/config", false, profiles, "beta", true)
 	if m.selected != 1 {
 		t.Fatalf("expected selected 1, got %d", m.selected)
 	}
@@ -25,7 +25,7 @@ func TestModelUpdateMovement(t *testing.T) {
 		{Name: "alpha"},
 		{Name: "beta"},
 	}
-	m := newModelWithActions("/config", profiles, "", false, stubActions())
+	m := newModelWithActions("/config", false, profiles, "", false, stubActions())
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	m = updated.(model)
@@ -62,7 +62,7 @@ func TestProfilesApplyTriggersApply(t *testing.T) {
 		return "beta", true, nil
 	}
 
-	m := newModelWithActions("/config", profiles, "beta", true, actions)
+	m := newModelWithActions("/config", false, profiles, "beta", true, actions)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatalf("expected apply command")
@@ -93,7 +93,7 @@ func TestApplyRefreshesActiveProfile(t *testing.T) {
 		return "alpha", true, nil
 	}
 
-	m := newModelWithActions("/config", profiles, "", false, actions)
+	m := newModelWithActions("/config", false, profiles, "", false, actions)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	msg := cmd()
 	updated, _ = updated.(model).Update(msg)
@@ -122,7 +122,7 @@ func TestBackupsScreenUsesListAndHandlesEmpty(t *testing.T) {
 		return nil, nil
 	}
 
-	m := newModelWithActions("/config", profiles, "", false, actions)
+	m := newModelWithActions("/config", false, profiles, "", false, actions)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	msg := cmd()
 	updated, _ = updated.(model).Update(msg)
@@ -152,7 +152,7 @@ func TestDiffScreenNoBackupsMessage(t *testing.T) {
 		return "", false, nil
 	}
 
-	m := newModelWithActions("/config", profiles, "", false, actions)
+	m := newModelWithActions("/config", false, profiles, "", false, actions)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
 	msg := cmd()
 	updated, _ = updated.(model).Update(msg)
@@ -167,7 +167,7 @@ func TestDiffScreenNoBackupsMessage(t *testing.T) {
 }
 
 func TestModelUpdateQuit(t *testing.T) {
-	m := newModelWithActions("/config", nil, "", false, stubActions())
+	m := newModelWithActions("/config", false, nil, "", false, stubActions())
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if cmd == nil {
 		t.Fatalf("expected quit command")
@@ -194,6 +194,21 @@ func stubActions() modelActions {
 		},
 		diffBetweenProfiles: func(dir, profileA, profileB string) (string, error) {
 			return "", nil
+		},
+		loadProfile: func(path string) (*profile.RootConfig, error) {
+			return &profile.RootConfig{}, nil
+		},
+		saveProfile: func(path string, cfg *profile.RootConfig) error {
+			return nil
+		},
+		backupProfile: func(dir, profileName string) (string, error) {
+			return "", nil
+		},
+		applyAutofill: func(cfg *profile.RootConfig, knownAgents []string, preset profile.Preset) bool {
+			return profile.ApplyAutofill(cfg, knownAgents, preset)
+		},
+		loadModels: func() []string {
+			return []string{"gpt-4o-mini"}
 		},
 	}
 }
