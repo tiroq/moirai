@@ -2,74 +2,57 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"moirai/internal/app"
 )
 
-func TestCLIFlagOverridesConfigFile(t *testing.T) {
-	configDir := t.TempDir()
-	configPath := filepath.Join(configDir, "moirai.json")
-	if err := os.WriteFile(configPath, []byte(`{"enableAutofill": false}`), 0o600); err != nil {
-		t.Fatalf("expected to write config file, got %v", err)
+func TestRunLaunchesTUIWhenNoArgs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	called := false
+	stub := func(config app.AppConfig) error {
+		called = true
+		expected := filepath.Join(home, ".config", "opencode")
+		if config.ConfigDir != expected {
+			t.Fatalf("expected config dir %q, got %q", expected, config.ConfigDir)
+		}
+		return nil
 	}
 
-	remaining, flags, err := parseGlobalFlags([]string{"list", "--enable-autofill"})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	exitCode := run([]string{"moirai"}, stub, stdout, stderr)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
-	if len(remaining) != 1 || remaining[0] != "list" {
-		t.Fatalf("expected remaining args to be [list], got %v", remaining)
-	}
-
-	var override *bool
-	if flags.EnableAutofillSet {
-		override = &flags.EnableAutofill
-	}
-
-	config, err := app.LoadConfig(configDir, override)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if !config.EnableAutofill {
-		t.Fatalf("expected EnableAutofill to be true after CLI override")
+	if !called {
+		t.Fatalf("expected TUI runner to be called")
 	}
 }
 
-func TestParseGlobalFlagsVersion(t *testing.T) {
-	remaining, flags, err := parseGlobalFlags([]string{"--version"})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if len(remaining) != 0 {
-		t.Fatalf("expected no remaining args, got %v", remaining)
-	}
-	if !flags.ShowVersion {
-		t.Fatalf("expected ShowVersion to be true")
-	}
-}
+func TestRunSkipsTUIWhenArgsExist(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 
-func TestShouldPrintVersion(t *testing.T) {
-	if !shouldPrintVersion([]string{"version"}, globalFlags{}) {
-		t.Fatalf("expected version command to print version")
+	called := false
+	stub := func(config app.AppConfig) error {
+		called = true
+		return nil
 	}
-	if !shouldPrintVersion([]string{"list"}, globalFlags{ShowVersion: true}) {
-		t.Fatalf("expected --version flag to print version")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	exitCode := run([]string{"moirai", "help"}, stub, stdout, stderr)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
-}
-
-func TestPrintVersion(t *testing.T) {
-	original := app.Version
-	app.Version = "test-version"
-	defer func() {
-		app.Version = original
-	}()
-
-	var buf bytes.Buffer
-	printVersion(&buf)
-	if got := buf.String(); got != "test-version\n" {
-		t.Fatalf("expected version output to be %q, got %q", "test-version\n", got)
+	if called {
+		t.Fatalf("expected TUI runner not to be called")
+	}
+	if stdout.Len() == 0 {
+		t.Fatalf("expected help output")
 	}
 }

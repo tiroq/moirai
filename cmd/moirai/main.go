@@ -14,30 +14,60 @@ import (
 	"moirai/internal/backup"
 	"moirai/internal/link"
 	"moirai/internal/profile"
+	"moirai/internal/tui"
 	"moirai/internal/util"
 )
 
 const defaultConfigDir = "~/.config/opencode"
 
 func main() {
-	args, globalFlags, err := parseGlobalFlags(os.Args[1:])
+	exitCode := run(os.Args, tui.Run, os.Stdout, os.Stderr)
+	if exitCode != 0 {
+		os.Exit(exitCode)
+	}
+}
+
+func run(args []string, tuiRunner func(app.AppConfig) error, stdout, stderr io.Writer) int {
+	remaining, globalFlags, err := parseGlobalFlags(args[1:])
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
-	if shouldPrintVersion(args, globalFlags) {
-		printVersion(os.Stdout)
-		return
+	if shouldPrintVersion(remaining, globalFlags) {
+		printVersion(stdout)
+		return 0
 	}
-	if len(args) == 0 || args[0] == "help" || args[0] == "--help" {
-		printHelp()
-		return
+	if len(remaining) == 0 {
+		configDir, err := util.ExpandUser(defaultConfigDir)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		configDir = filepath.Clean(configDir)
+		var enableAutofillOverride *bool
+		if globalFlags.EnableAutofillSet {
+			enableAutofillOverride = &globalFlags.EnableAutofill
+		}
+		appConfig, err := app.LoadConfig(configDir, enableAutofillOverride)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if err := tuiRunner(appConfig); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
+	}
+	if remaining[0] == "help" || remaining[0] == "--help" {
+		printHelp(stdout)
+		return 0
 	}
 
 	configDir, err := util.ExpandUser(defaultConfigDir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
 	configDir = filepath.Clean(configDir)
 	var enableAutofillOverride *bool
@@ -46,107 +76,108 @@ func main() {
 	}
 	appConfig, err := app.LoadConfig(configDir, enableAutofillOverride)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
 
-	switch args[0] {
+	switch remaining[0] {
 	case "list":
 		if err := runList(appConfig); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
 	case "apply":
-		if len(args) != 2 {
-			fmt.Fprintln(os.Stderr, "Usage: moirai apply <profile>")
-			os.Exit(1)
+		if len(remaining) != 2 {
+			fmt.Fprintln(stderr, "Usage: moirai apply <profile>")
+			return 1
 		}
-		if err := runApply(appConfig, args[1]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+		if err := runApply(appConfig, remaining[1]); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
 	case "doctor":
-		if len(args) != 2 {
-			fmt.Fprintln(os.Stderr, "Usage: moirai doctor <profile>")
-			os.Exit(1)
+		if len(remaining) != 2 {
+			fmt.Fprintln(stderr, "Usage: moirai doctor <profile>")
+			return 1
 		}
-		exitCode, err := runDoctor(appConfig, args[1])
+		exitCode, err := runDoctor(appConfig, remaining[1])
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
 		if exitCode != 0 {
-			os.Exit(exitCode)
+			return exitCode
 		}
 	case "backup":
-		if len(args) != 2 {
-			fmt.Fprintln(os.Stderr, "Usage: moirai backup <profile>")
-			os.Exit(1)
+		if len(remaining) != 2 {
+			fmt.Fprintln(stderr, "Usage: moirai backup <profile>")
+			return 1
 		}
-		if err := runBackup(appConfig, args[1]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+		if err := runBackup(appConfig, remaining[1]); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
 	case "backups":
-		if len(args) != 2 {
-			fmt.Fprintln(os.Stderr, "Usage: moirai backups <profile>")
-			os.Exit(1)
+		if len(remaining) != 2 {
+			fmt.Fprintln(stderr, "Usage: moirai backups <profile>")
+			return 1
 		}
-		if err := runBackups(appConfig, args[1]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+		if err := runBackups(appConfig, remaining[1]); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
 	case "restore":
-		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: moirai restore <profile> --from <backupPathOrFilename>")
-			os.Exit(1)
+		if len(remaining) < 2 {
+			fmt.Fprintln(stderr, "Usage: moirai restore <profile> --from <backupPathOrFilename>")
+			return 1
 		}
 		restoreFlags := flag.NewFlagSet("restore", flag.ContinueOnError)
 		from := restoreFlags.String("from", "", "backup path or filename")
-		if err := restoreFlags.Parse(args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+		if err := restoreFlags.Parse(remaining[2:]); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
-		if err := runRestore(appConfig, args[1], *from); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+		if err := runRestore(appConfig, remaining[1], *from); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
 	case "diff":
-		exitCode, err := runDiff(appConfig, args[1:])
+		exitCode, err := runDiff(appConfig, remaining[1:])
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
 		if exitCode != 0 {
-			os.Exit(exitCode)
+			return exitCode
 		}
 	case "autofill":
-		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: moirai autofill <profile> --preset <preset>")
-			os.Exit(1)
+		if len(remaining) < 2 {
+			fmt.Fprintln(stderr, "Usage: moirai autofill <profile> --preset <preset>")
+			return 1
 		}
 		autofillFlags := flag.NewFlagSet("autofill", flag.ContinueOnError)
 		preset := autofillFlags.String("preset", "", "autofill preset")
-		if err := autofillFlags.Parse(args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+		if err := autofillFlags.Parse(remaining[2:]); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
 		if *preset == "" {
-			fmt.Fprintln(os.Stderr, "Usage: moirai autofill <profile> --preset <preset>")
-			os.Exit(1)
+			fmt.Fprintln(stderr, "Usage: moirai autofill <profile> --preset <preset>")
+			return 1
 		}
-		exitCode, err := runAutofill(appConfig, args[1], *preset)
+		exitCode, err := runAutofill(appConfig, remaining[1], *preset)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			fmt.Fprintln(stderr, err)
+			return 1
 		}
 		if exitCode != 0 {
-			os.Exit(exitCode)
+			return exitCode
 		}
 	default:
-		printHelp()
-		os.Exit(1)
+		printHelp(stdout)
+		return 1
 	}
+	return 0
 }
 
 type globalFlags struct {
@@ -183,21 +214,21 @@ func parseGlobalFlags(args []string) ([]string, globalFlags, error) {
 	return remaining, flags, nil
 }
 
-func printHelp() {
-	fmt.Println("Usage: moirai list")
-	fmt.Println("       moirai apply <profile>")
-	fmt.Println("       moirai doctor <profile>")
-	fmt.Println("       moirai backup <profile>")
-	fmt.Println("       moirai backups <profile>")
-	fmt.Println("       moirai restore <profile> --from <backupPathOrFilename>")
-	fmt.Println("       moirai diff <profile> --against last-backup")
-	fmt.Println("       moirai diff --between <profileA> <profileB>")
-	fmt.Println("       moirai autofill <profile> --preset <preset>")
-	fmt.Println("       moirai version")
-	fmt.Println("Global options:")
-	fmt.Println("       --enable-autofill")
-	fmt.Println("       --version")
-	fmt.Println("       moirai help")
+func printHelp(w io.Writer) {
+	fmt.Fprintln(w, "Usage: moirai list")
+	fmt.Fprintln(w, "       moirai apply <profile>")
+	fmt.Fprintln(w, "       moirai doctor <profile>")
+	fmt.Fprintln(w, "       moirai backup <profile>")
+	fmt.Fprintln(w, "       moirai backups <profile>")
+	fmt.Fprintln(w, "       moirai restore <profile> --from <backupPathOrFilename>")
+	fmt.Fprintln(w, "       moirai diff <profile> --against last-backup")
+	fmt.Fprintln(w, "       moirai diff --between <profileA> <profileB>")
+	fmt.Fprintln(w, "       moirai autofill <profile> --preset <preset>")
+	fmt.Fprintln(w, "       moirai version")
+	fmt.Fprintln(w, "Global options:")
+	fmt.Fprintln(w, "       --enable-autofill")
+	fmt.Fprintln(w, "       --version")
+	fmt.Fprintln(w, "       moirai help")
 }
 
 func shouldPrintVersion(args []string, flags globalFlags) bool {
