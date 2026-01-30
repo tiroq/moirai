@@ -1,0 +1,79 @@
+version: '3'
+
+shell: bash
+
+Tasks:
+  fmt:
+    desc: Format Go files
+    cmds:
+      - |
+        set -euo pipefail
+        files=$(rg --files -g '*.go')
+        if [ -z "$files" ]; then
+          exit 0
+        fi
+        gofmt -w $files
+
+  fmt:check:
+    desc: Check Go formatting
+    cmds:
+      - |
+        set -euo pipefail
+        files=$(rg --files -g '*.go')
+        if [ -z "$files" ]; then
+          exit 0
+        fi
+        changed=$(gofmt -l $files)
+        if [ -n "$changed" ]; then
+          echo "gofmt would change:"
+          echo "$changed"
+          exit 1
+        fi
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test ./...
+
+  cover:
+    desc: Run coverage with gates
+    cmds:
+      - |
+        set -euo pipefail
+        check_cover() {
+          local pkg="$1"
+          local min="$2"
+          local out cov
+          out=$(go test "$pkg" -cover)
+          echo "$out"
+          cov=$(echo "$out" | awk '/coverage:/ {print $2}' | tail -n 1 | tr -d '%')
+          if [ -z "$cov" ]; then
+            echo "coverage not found for $pkg" >&2
+            exit 1
+          fi
+          if ! awk -v cov="$cov" -v min="$min" 'BEGIN {exit !(cov + 0 >= min)}'; then
+            echo "coverage $cov% for $pkg is below $min%" >&2
+            exit 1
+          fi
+        }
+        check_cover ./internal/profile 70
+        check_cover ./internal/link 70
+
+  ci:
+    desc: Run CI checks
+    cmds:
+      - task: fmt:check
+      - task: lint
+      - task: vet
+      - task: test
+      - task: cover
