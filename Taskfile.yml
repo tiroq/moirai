@@ -57,6 +57,11 @@ tasks:
     cmds:
       - go test ./...
 
+  build:
+    desc: Build CLI binary
+    cmds:
+      - go build -o bin/moirai ./cmd/moirai
+
   cover:
     desc: Run coverage with gates
     cmds:
