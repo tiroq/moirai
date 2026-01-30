@@ -24,7 +24,25 @@ func (m model) viewProfiles() string {
 	if len(m.profilesVisible) == 0 {
 		b.WriteString("  (none)\n")
 	} else {
-		for i, profileInfo := range m.profilesVisible {
+		pageSize := len(m.profilesVisible)
+		if m.height > 0 {
+			// Keep the overall render within the terminal height so we don't push
+			// the title line into scrollback. Reserve 2 lines for title + status.
+			//
+			// Header lines here:
+			//   ConfigDir, Active, optional Filter, blank, "Profiles:"
+			headerLines := 4
+			if m.profileFilterMode || m.profileFilter != "" {
+				headerLines = 5
+			}
+			pageSize = m.height - 2 - headerLines
+			if pageSize < 1 {
+				pageSize = 1
+			}
+		}
+		start, end := modelWindow(len(m.profilesVisible), m.selected, pageSize)
+		for i := start; i < end; i++ {
+			profileInfo := m.profilesVisible[i]
 			prefix := "  "
 			isSelected := i == m.selected
 			if isSelected {

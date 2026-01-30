@@ -27,7 +27,22 @@ func (m model) viewAgents() string {
 	if len(m.agentsEntries) == 0 {
 		b.WriteString("  (none)\n")
 	} else {
-		for i, entry := range m.agentsEntries {
+		pageSize := len(m.agentsEntries)
+		if m.height > 0 {
+			// Reserve 2 lines for title + status. Header lines here:
+			//   Profile, optional "Unsaved changes", blank, "Agents:"
+			headerLines := 3
+			if m.agentsDirty {
+				headerLines = 4
+			}
+			pageSize = m.height - 2 - headerLines
+			if pageSize < 1 {
+				pageSize = 1
+			}
+		}
+		start, end := modelWindow(len(m.agentsEntries), m.agentsSelected, pageSize)
+		for i := start; i < end; i++ {
+			entry := m.agentsEntries[i]
 			prefix := "  "
 			if i == m.agentsSelected {
 				prefix = "> "
