@@ -1,4 +1,7 @@
 # moirai
+
+![Moirai Logo](./assets/moirai.png)
+
 Moirai is a CLI tool for managing oh-my-opencode configuration profiles. It discovers profile files, switches the active config by updating a symlink, and can help with backups and diffs so you can move between setups safely.
 
 If you keep multiple oh-my-opencode profiles for different workflows, moirai gives you a small, focused interface to list and apply them without hand-editing files.
