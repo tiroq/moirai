@@ -280,18 +280,18 @@ func padRight(s string, width int) string {
 	return s + strings.Repeat(" ", pad)
 }
 
-func truncateRunes(s string, max int) string {
-	if max <= 0 {
+func truncateRunes(s string, maxRunes int) string {
+	if maxRunes <= 0 {
 		return ""
 	}
-	if runeLen(s) <= max {
+	if runeLen(s) <= maxRunes {
 		return s
 	}
-	if max == 1 {
+	if maxRunes == 1 {
 		return "…"
 	}
 	runes := []rune(s)
-	return string(runes[:max-1]) + "…"
+	return string(runes[:maxRunes-1]) + "…"
 }
 
 func runeLen(s string) int {
