@@ -31,6 +31,16 @@ Run the full CI suite locally:
 task ci
 ```
 
+## Smoke tests
+
+Run end-to-end smoke checks in an isolated temp config directory:
+
+```
+task smoke
+```
+
+The smoke task runs destructive scenarios against a temporary `XDG_CONFIG_HOME`, so it never touches real user config files.
+
 ## Release (publish)
 
 Tag and push a release:

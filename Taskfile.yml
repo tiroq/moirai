@@ -62,6 +62,16 @@ tasks:
     cmds:
       - go build -o bin/moirai ./cmd/moirai
 
+  smoke:
+    desc: Run smoke tests
+    cmds:
+      - |
+        set -euo pipefail
+        if [ ! -x bin/moirai ]; then
+          task build
+        fi
+        ./scripts/smoke.sh
+
   cover:
     desc: Run coverage with gates
     cmds:
