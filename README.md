@@ -41,13 +41,29 @@ task smoke
 
 The smoke task runs destructive scenarios against a temporary `XDG_CONFIG_HOME`, so it never touches real user config files.
 
-## Release (publish)
+## Release process
 
-Tag and push a release:
+1) Run CI locally:
 
 ```
-git tag v0.1.0 && git push origin v0.1.0
+task ci
 ```
+
+2) Create a release tag locally:
+
+```
+task release:patch
+```
+
+(Or use `task release:minor` / `task release:major`.)
+
+3) Publish the prepared tag:
+
+```
+task release:publish VERSION=vX.Y.Z
+```
+
+4) GitHub Actions runs automatically and a GitHub Release appears with assets and checksums.
 
 ## Basic usage
 

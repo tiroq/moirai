@@ -133,3 +133,11 @@ tasks:
         set -euo pipefail
         : "${VERSION:?VERSION is required (e.g. VERSION=v0.1.0)}"
         ./scripts/release-bump.sh "$VERSION"
+
+  release:publish:
+    desc: Publish prepared release tag (push to origin; VERSION=vX.Y.Z)
+    cmds:
+      - |
+        set -euo pipefail
+        : "${VERSION:?VERSION is required (e.g. VERSION=v0.1.0)}"
+        ./scripts/release-publish.sh "$VERSION"
