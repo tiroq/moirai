@@ -25,6 +25,15 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "apply":
+		if len(args) != 2 {
+			fmt.Fprintln(os.Stderr, "Usage: moirai apply <profile>")
+			os.Exit(1)
+		}
+		if err := runApply(args[1]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	default:
 		printHelp()
 		os.Exit(1)
@@ -33,6 +42,7 @@ func main() {
 
 func printHelp() {
 	fmt.Println("Usage: moirai list")
+	fmt.Println("       moirai apply <profile>")
 	fmt.Println("       moirai help")
 }
 
@@ -67,5 +77,19 @@ func runList() error {
 		}
 		fmt.Printf(" - %s%s\n", info.Name, suffix)
 	}
+	return nil
+}
+
+func runApply(profileName string) error {
+	configDir, err := util.ExpandUser(defaultConfigDir)
+	if err != nil {
+		return err
+	}
+	configDir = filepath.Clean(configDir)
+
+	if err := link.ApplyProfile(configDir, profileName); err != nil {
+		return err
+	}
+	fmt.Printf("Applied: %s\n", profileName)
 	return nil
 }
