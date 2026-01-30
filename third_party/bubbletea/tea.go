@@ -52,6 +52,14 @@ func (p *Program) Run() (Model, error) {
 	}
 	defer restore()
 
+	if w, h, ok := windowSize(os.Stdout); ok {
+		if next, cmd := m.Update(WindowSizeMsg{Width: w, Height: h}); next != nil {
+			m = next
+			// Ignore cmd; size updates shouldn't trigger side effects.
+			_ = cmd
+		}
+	}
+
 	clearScreen(os.Stdout)
 	if _, err := io.WriteString(os.Stdout, m.View()); err != nil {
 		return nil, err
@@ -90,6 +98,13 @@ func (p *Program) Run() (Model, error) {
 			}
 			if quit {
 				return m, nil
+			}
+		}
+
+		if w, h, ok := windowSize(os.Stdout); ok {
+			if next, cmd := m.Update(WindowSizeMsg{Width: w, Height: h}); next != nil {
+				m = next
+				_ = cmd
 			}
 		}
 

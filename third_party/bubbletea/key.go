@@ -103,6 +103,13 @@ func readKeyMsg(r *bufio.Reader) (Msg, error) {
 }
 
 func readEscapeSequence(r *bufio.Reader) (Msg, error) {
+	// Don't block waiting for the next byte. If this is a lone ESC press the
+	// terminal often won't send another byte, and we'd otherwise wait until the
+	// next keypress before returning KeyEsc (delaying UI updates).
+	if r.Buffered() == 0 {
+		return KeyMsg{Type: KeyEsc}, nil
+	}
+
 	peek, err := r.Peek(1)
 	if err != nil {
 		if err == io.EOF {
