@@ -57,3 +57,35 @@ func TestActiveProfileMissingOrRegularFile(t *testing.T) {
 		t.Fatalf("expected regular file to be inactive")
 	}
 }
+
+func TestActiveProfileSymlinkInvalidTarget(t *testing.T) {
+	dir := t.TempDir()
+
+	activePath := filepath.Join(dir, "oh-my-opencode.json")
+	if err := os.Symlink("oh-my-opencode.json.bak.20240101-000000", activePath); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	name, ok, err := ActiveProfile(dir)
+	if err != nil {
+		t.Fatalf("ActiveProfile backup link: %v", err)
+	}
+	if ok || name != "" {
+		t.Fatalf("expected backup link to be inactive")
+	}
+
+	if err := os.Remove(activePath); err != nil {
+		t.Fatalf("remove symlink: %v", err)
+	}
+	if err := os.Symlink("oh-my-opencode.json.missing", activePath); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	name, ok, err = ActiveProfile(dir)
+	if err != nil {
+		t.Fatalf("ActiveProfile missing target: %v", err)
+	}
+	if ok || name != "" {
+		t.Fatalf("expected missing target to be inactive")
+	}
+}
