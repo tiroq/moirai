@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"moirai/internal/backup"
 	"moirai/internal/link"
 	"moirai/internal/profile"
 	"moirai/internal/util"
@@ -47,6 +48,24 @@ func main() {
 		if exitCode != 0 {
 			os.Exit(exitCode)
 		}
+	case "backup":
+		if len(args) != 2 {
+			fmt.Fprintln(os.Stderr, "Usage: moirai backup <profile>")
+			os.Exit(1)
+		}
+		if err := runBackup(args[1]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "backups":
+		if len(args) != 2 {
+			fmt.Fprintln(os.Stderr, "Usage: moirai backups <profile>")
+			os.Exit(1)
+		}
+		if err := runBackups(args[1]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	default:
 		printHelp()
 		os.Exit(1)
@@ -57,6 +76,8 @@ func printHelp() {
 	fmt.Println("Usage: moirai list")
 	fmt.Println("       moirai apply <profile>")
 	fmt.Println("       moirai doctor <profile>")
+	fmt.Println("       moirai backup <profile>")
+	fmt.Println("       moirai backups <profile>")
 	fmt.Println("       moirai help")
 }
 
@@ -133,4 +154,42 @@ func runDoctor(profileName string) (int, error) {
 		fmt.Printf(" - %s\n", agent)
 	}
 	return 2, nil
+}
+
+func runBackup(profileName string) error {
+	configDir, err := util.ExpandUser(defaultConfigDir)
+	if err != nil {
+		return err
+	}
+	configDir = filepath.Clean(configDir)
+
+	backupPath, err := backup.BackupProfile(configDir, profileName)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Backup: %s\n", backupPath)
+	return nil
+}
+
+func runBackups(profileName string) error {
+	configDir, err := util.ExpandUser(defaultConfigDir)
+	if err != nil {
+		return err
+	}
+	configDir = filepath.Clean(configDir)
+
+	backups, err := backup.ListProfileBackups(configDir, profileName)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Backups:")
+	if len(backups) == 0 {
+		fmt.Println(" (none)")
+		return nil
+	}
+	for _, name := range backups {
+		fmt.Printf(" - %s\n", name)
+	}
+	return nil
 }
