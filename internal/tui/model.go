@@ -249,7 +249,8 @@ func (m model) View() string {
 		body += "\n\n" + m.renderHelpModal()
 	}
 	body += "\n" + m.renderStatusBar()
-	return body + "\n"
+	title := centerStyled("MOIRAI", selectedStyle, m.width)
+	return title + "\n" + body + "\n"
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -488,7 +489,9 @@ func (m model) selectedProfileInfo() (profile.ProfileInfo, bool) {
 }
 
 func (m *model) resizeViewport() {
-	reserved := 3
+	// Reserve 1 line for the app title bar and 1 line for the status bar, plus
+	// 2 lines for the diff screen header spacing.
+	reserved := 4
 	if m.height-reserved < 1 {
 		m.viewport.height = 1
 	} else {

@@ -91,6 +91,18 @@ func (m model) renderStatusBar() string {
 	return left + strings.Repeat(" ", padding) + right
 }
 
+func centerStyled(text string, style textStyle, width int) string {
+	if width <= 0 {
+		return style.Render(text)
+	}
+	textWidth := runeLen(text)
+	padding := (width - textWidth) / 2
+	if padding < 0 {
+		padding = 0
+	}
+	return strings.Repeat(" ", padding) + style.Render(text)
+}
+
 func statusTextStyle(kind statusKind) textStyle {
 	switch kind {
 	case statusKindSuccess:
