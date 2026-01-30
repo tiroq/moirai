@@ -33,6 +33,33 @@ func TestRunLaunchesTUIWhenNoArgs(t *testing.T) {
 	}
 }
 
+func TestRunUsesXDGConfigHome(t *testing.T) {
+	home := t.TempDir()
+	xdg := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+
+	called := false
+	stub := func(config app.AppConfig) error {
+		called = true
+		expected := filepath.Join(xdg, "opencode")
+		if config.ConfigDir != expected {
+			t.Fatalf("expected config dir %q, got %q", expected, config.ConfigDir)
+		}
+		return nil
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	exitCode := run([]string{"moirai"}, stub, stdout, stderr)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if !called {
+		t.Fatalf("expected TUI runner to be called")
+	}
+}
+
 func TestRunSkipsTUIWhenArgsExist(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

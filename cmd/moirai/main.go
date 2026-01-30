@@ -38,12 +38,11 @@ func run(args []string, tuiRunner func(app.AppConfig) error, stdout, stderr io.W
 		return 0
 	}
 	if len(remaining) == 0 {
-		configDir, err := util.ExpandUser(defaultConfigDir)
+		configDir, err := resolveConfigDir()
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		configDir = filepath.Clean(configDir)
 		var enableAutofillOverride *bool
 		if globalFlags.EnableAutofillSet {
 			enableAutofillOverride = &globalFlags.EnableAutofill
@@ -64,12 +63,11 @@ func run(args []string, tuiRunner func(app.AppConfig) error, stdout, stderr io.W
 		return 0
 	}
 
-	configDir, err := util.ExpandUser(defaultConfigDir)
+	configDir, err := resolveConfigDir()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	configDir = filepath.Clean(configDir)
 	var enableAutofillOverride *bool
 	if globalFlags.EnableAutofillSet {
 		enableAutofillOverride = &globalFlags.EnableAutofill
@@ -178,6 +176,17 @@ func run(args []string, tuiRunner func(app.AppConfig) error, stdout, stderr io.W
 		return 1
 	}
 	return 0
+}
+
+func resolveConfigDir() (string, error) {
+	if xdgHome := os.Getenv("XDG_CONFIG_HOME"); xdgHome != "" {
+		return filepath.Clean(filepath.Join(xdgHome, "opencode")), nil
+	}
+	configDir, err := util.ExpandUser(defaultConfigDir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(configDir), nil
 }
 
 type globalFlags struct {
