@@ -64,6 +64,7 @@ type model struct {
 	modelFiltered    []string
 	modelSelected    int
 	modelTargetAgent string
+	modelStatus      string
 }
 
 type applyResultMsg struct {
@@ -101,6 +102,14 @@ type agentsAutofillMsg struct {
 	changed bool
 	saved   bool
 	err     error
+}
+
+type ModelsRefreshedMsg struct {
+	Models []string
+}
+
+type ModelsRefreshFailedMsg struct {
+	Err error
 }
 
 func newModel(configDir string, enableAutofill bool, profiles []profile.ProfileInfo, activeName string, hasActive bool) model {
@@ -196,6 +205,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleAgentsSave(msg)
 	case agentsAutofillMsg:
 		return m.handleAgentsAutofill(msg)
+	case ModelsRefreshedMsg:
+		m.modelAll = msg.Models
+		m.updateModelFilter()
+		m.modelStatus = "Models refreshed."
+		return m, nil
+	case ModelsRefreshFailedMsg:
+		m.modelStatus = fmt.Sprintf("Model refresh failed: %v", msg.Err)
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}

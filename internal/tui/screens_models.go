@@ -1,22 +1,32 @@
 package tui
 
 import (
-	"bufio"
-	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"time"
 
+	modelsCache "moirai/internal/models"
+	"moirai/internal/opencode"
 	"moirai/internal/profile"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+const modelsCacheTTL = 24 * time.Hour
+const modelsLoadBudget = 50 * time.Millisecond
+
 func (m model) viewModels() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Model Picker: %s\n", m.modelTargetAgent)
 	fmt.Fprintf(&b, "Search: %s\n\n", m.modelSearch)
+	if m.modelStatus != "" {
+		b.WriteString(hintStyle.Render(m.modelStatus))
+		b.WriteString("\n\n")
+	}
 	if len(m.modelFiltered) == 0 {
 		b.WriteString("  (none)\n")
 	} else {
@@ -33,7 +43,7 @@ func (m model) viewModels() string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(hintStyle.Render("enter select · esc cancel · j/k/arrows move · type to filter"))
+	b.WriteString(hintStyle.Render("enter select · R refresh · esc cancel · j/k/arrows move · type to filter"))
 	b.WriteString("\n")
 	return b.String()
 }
@@ -55,6 +65,10 @@ func (m model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyRunes:
+		if string(msg.Runes) == "R" {
+			m.modelStatus = "Refreshing models..."
+			return m, m.refreshModelsCmd(true)
+		}
 		m.modelSearch += string(msg.Runes)
 		m.updateModelFilter()
 		return m, nil
@@ -129,29 +143,31 @@ func filterModelList(models []string, query string) []string {
 }
 
 func loadModelList() []string {
-	path := filepath.Join("configs", "models.txt")
-	data, err := os.ReadFile(path)
+	configHome, err := resolveConfigHome()
 	if err != nil {
 		return defaultModelList()
 	}
-	models := parseModelList(data)
-	if len(models) == 0 {
+
+	type result struct {
+		models []string
+		ok     bool
+		err    error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		models, ok, err := modelsCache.LoadCachedModels(configHome)
+		ch <- result{models: models, ok: ok, err: err}
+	}()
+
+	select {
+	case res := <-ch:
+		if res.err != nil || !res.ok || len(res.models) == 0 {
+			return defaultModelList()
+		}
+		return res.models
+	case <-time.After(modelsLoadBudget):
 		return defaultModelList()
 	}
-	return models
-}
-
-func parseModelList(data []byte) []string {
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	models := make([]string, 0)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		models = append(models, line)
-	}
-	return models
 }
 
 func defaultModelList() []string {
@@ -164,5 +180,48 @@ func defaultModelList() []string {
 		"gpt-4.5-preview",
 		"o1-mini",
 		"o1-preview",
+	}
+}
+
+func resolveConfigHome() (string, error) {
+	if xdgHome := os.Getenv("XDG_CONFIG_HOME"); xdgHome != "" {
+		return filepath.Clean(xdgHome), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config"), nil
+}
+
+func (m model) refreshModelsCmd(force bool) tea.Cmd {
+	configHome, err := resolveConfigHome()
+	if err != nil {
+		return func() tea.Msg { return ModelsRefreshFailedMsg{Err: err} }
+	}
+
+	current := append([]string(nil), m.modelAll...)
+	if !force {
+		age, ok, err := modelsCache.CacheAge(configHome)
+		if err != nil {
+			return func() tea.Msg { return ModelsRefreshFailedMsg{Err: err} }
+		}
+		if ok && age < modelsCacheTTL {
+			return nil
+		}
+	}
+
+	return func() tea.Msg {
+		ctx := context.Background()
+		models, err := opencode.ListModels(ctx)
+		if err != nil {
+			return ModelsRefreshFailedMsg{Err: err}
+		}
+		if !reflect.DeepEqual(models, current) {
+			if err := modelsCache.SaveCachedModelsAtomic(configHome, models); err != nil {
+				return ModelsRefreshFailedMsg{Err: err}
+			}
+		}
+		return ModelsRefreshedMsg{Models: models}
 	}
 }

@@ -143,6 +143,7 @@ func (m model) openModelPicker() (tea.Model, tea.Cmd) {
 	m.modelTargetAgent = agent.Name
 	m.modelAll = m.actions.loadModels()
 	m.modelSearch = ""
+	m.modelStatus = ""
 	m.modelFiltered = filterModelList(m.modelAll, m.modelSearch)
 	if len(m.modelFiltered) == 0 {
 		m.modelSelected = -1
@@ -150,7 +151,11 @@ func (m model) openModelPicker() (tea.Model, tea.Cmd) {
 		m.modelSelected = 0
 	}
 	m.screen = screenModels
-	return m, nil
+	cmd := m.refreshModelsCmd(false)
+	if cmd != nil {
+		m.modelStatus = "Refreshing models..."
+	}
+	return m, cmd
 }
 
 func (m model) handleAgentsLoad(msg agentsLoadMsg) (tea.Model, tea.Cmd) {
