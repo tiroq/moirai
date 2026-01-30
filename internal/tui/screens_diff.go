@@ -32,8 +32,5 @@ func (m model) viewDiff() string {
 		}
 	}
 
-	b.WriteString("\n")
-	b.WriteString(hintStyle.Render("a active · d last-backup · esc back · q quit · j/k/arrows/pg scroll"))
-	b.WriteString("\n")
 	return b.String()
 }

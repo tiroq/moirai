@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"moirai/internal/profile"
 
@@ -26,13 +27,21 @@ const (
 )
 
 type model struct {
-	configDir  string
-	enableAutofill bool
-	profiles   []profile.ProfileInfo
-	activeName string
-	hasActive  bool
-	selected   int
-	status     string
+	configDir       string
+	enableAutofill  bool
+	profiles        []profile.ProfileInfo
+	profilesVisible []profile.ProfileInfo
+	activeName      string
+	hasActive       bool
+	selected        int
+
+	profileFilter     string
+	profileFilterMode bool
+
+	status statusBarState
+
+	helpOpen bool
+	confirm  confirmState
 
 	screen screenID
 
@@ -57,14 +66,12 @@ type model struct {
 	agentsEntries  []agentEntry
 	agentsSelected int
 	agentsDirty    bool
-	agentsStatus   string
 
 	modelSearch      string
 	modelAll         []string
 	modelFiltered    []string
 	modelSelected    int
 	modelTargetAgent string
-	modelStatus      string
 }
 
 type applyResultMsg struct {
@@ -132,16 +139,17 @@ func newModelWithActions(configDir string, enableAutofill bool, profiles []profi
 
 	actions = normalizeActions(actions)
 	m := model{
-		configDir:  configDir,
-		enableAutofill: enableAutofill,
-		profiles:   profiles,
-		activeName: activeName,
-		hasActive:  hasActive,
-		selected:   selected,
-		screen:     screenProfiles,
-		width:      80,
-		height:     24,
-		actions:    actions,
+		configDir:       configDir,
+		enableAutofill:  enableAutofill,
+		profiles:        profiles,
+		profilesVisible: append([]profile.ProfileInfo(nil), profiles...),
+		activeName:      activeName,
+		hasActive:       hasActive,
+		selected:        selected,
+		screen:          screenProfiles,
+		width:           80,
+		height:          24,
+		actions:         actions,
 	}
 	m.viewport = newDiffViewport()
 	m.resizeViewport()
@@ -208,10 +216,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ModelsRefreshedMsg:
 		m.modelAll = msg.Models
 		m.updateModelFilter()
-		m.modelStatus = "Models refreshed."
+		m.setStatus(statusKindSuccess, "Models refreshed.")
 		return m, nil
 	case ModelsRefreshFailedMsg:
-		m.modelStatus = fmt.Sprintf("Model refresh failed: %v", msg.Err)
+		m.setStatus(statusKindError, fmt.Sprintf("Model refresh failed: %v", msg.Err))
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -220,18 +228,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	var body string
 	switch m.screen {
 	case screenBackups:
-		return m.viewBackups()
+		body = m.viewBackups()
 	case screenDiff:
-		return m.viewDiff()
+		body = m.viewDiff()
 	case screenAgents:
-		return m.viewAgents()
+		body = m.viewAgents()
 	case screenModels:
-		return m.viewModels()
+		body = m.viewModels()
 	default:
-		return m.viewProfiles()
+		body = m.viewProfiles()
 	}
+
+	body = strings.TrimRight(body, "\n")
+	if m.confirm.Open {
+		body += "\n\n" + m.renderConfirmModal()
+	} else if m.helpOpen {
+		body += "\n\n" + m.renderHelpModal()
+	}
+	body += "\n" + m.renderStatusBar()
+	return body + "\n"
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -239,28 +257,26 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if key == "q" || key == "ctrl+c" {
 		return m, tea.Quit
 	}
-	if key == "esc" && m.screen == screenProfiles {
-		return m, tea.Quit
+	if m.confirm.Open {
+		return m.handleConfirmKey(msg)
 	}
+	if key == "?" {
+		m.helpOpen = !m.helpOpen
+		return m, nil
+	}
+	if m.helpOpen {
+		switch key {
+		case "esc", "?":
+			m.helpOpen = false
+		}
+		return m, nil
+	}
+
+	m.clearStatusForKey(key)
 
 	switch m.screen {
 	case screenProfiles:
-		switch key {
-		case "j", "down":
-			m.status = ""
-			m.moveSelection(1)
-		case "k", "up":
-			m.status = ""
-			m.moveSelection(-1)
-		case "enter":
-			return m.applySelected()
-		case "e":
-			return m.openAgents()
-		case "b":
-			return m.openBackups()
-		case "d":
-			return m.openDiff(diffModeLastBackup)
-		}
+		return m.handleProfilesKey(msg)
 	case screenBackups:
 		if key == "esc" {
 			m.screen = screenProfiles
@@ -291,19 +307,17 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case screenAgents:
 		switch key {
 		case "j", "down":
-			m.agentsStatus = ""
 			m.moveAgentsSelection(1)
 		case "k", "up":
-			m.agentsStatus = ""
 			m.moveAgentsSelection(-1)
 		case "enter":
 			return m.openModelPicker()
 		case "s":
-			return m.saveAgents()
+			return m.confirmSaveAgents()
 		case "r":
 			return m.reloadAgents()
 		case "a":
-			return m.autofillAgents()
+			return m.confirmAutofillAgents()
 		case "esc":
 			m.screen = screenProfiles
 		}
@@ -314,12 +328,20 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) applySelected() (tea.Model, tea.Cmd) {
+func (m model) confirmApplySelected() (tea.Model, tea.Cmd) {
 	name, ok := m.selectedProfile()
 	if !ok {
-		m.status = "No profiles available."
+		m.setStatus(statusKindError, "No profiles available.")
 		return m, nil
 	}
+	prompt := fmt.Sprintf("Apply profile '%s'? (y/n)", name)
+	m.openConfirm(prompt, func(m model) (tea.Model, tea.Cmd) {
+		return m.applyProfile(name)
+	})
+	return m, nil
+}
+
+func (m model) applyProfile(name string) (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		err := m.actions.applyProfile(m.configDir, name)
 		return applyResultMsg{profile: name, err: err}
@@ -329,7 +351,7 @@ func (m model) applySelected() (tea.Model, tea.Cmd) {
 func (m model) openBackups() (tea.Model, tea.Cmd) {
 	name, ok := m.selectedProfile()
 	if !ok {
-		m.status = "No profiles available."
+		m.setStatus(statusKindError, "No profiles available.")
 		return m, nil
 	}
 	return m, func() tea.Msg {
@@ -341,7 +363,7 @@ func (m model) openBackups() (tea.Model, tea.Cmd) {
 func (m model) openDiff(mode diffMode) (tea.Model, tea.Cmd) {
 	name, ok := m.selectedProfile()
 	if !ok {
-		m.status = "No profiles available."
+		m.setStatus(statusKindError, "No profiles available.")
 		return m, nil
 	}
 
@@ -384,14 +406,14 @@ func (m model) openDiff(mode diffMode) (tea.Model, tea.Cmd) {
 
 func (m model) handleApplyResult(msg applyResultMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.status = msg.err.Error()
+		m.setStatus(statusKindError, msg.err.Error())
 		return m, nil
 	}
 
-	m.status = fmt.Sprintf("Applied: %s", msg.profile)
+	m.setStatus(statusKindSuccess, fmt.Sprintf("Applied: %s", msg.profile))
 	activeName, ok, err := m.actions.activeProfile(m.configDir)
 	if err != nil {
-		m.status = err.Error()
+		m.setStatus(statusKindError, err.Error())
 		return m, nil
 	}
 	m.activeName = activeName
@@ -439,34 +461,34 @@ func (m model) handleDiffResult(msg diffResultMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) moveSelection(delta int) {
-	if len(m.profiles) == 0 {
+	if len(m.profilesVisible) == 0 {
 		return
 	}
 	m.selected += delta
 	if m.selected < 0 {
 		m.selected = 0
 	}
-	if m.selected >= len(m.profiles) {
-		m.selected = len(m.profiles) - 1
+	if m.selected >= len(m.profilesVisible) {
+		m.selected = len(m.profilesVisible) - 1
 	}
 }
 
 func (m model) selectedProfile() (string, bool) {
-	if m.selected < 0 || m.selected >= len(m.profiles) {
+	if m.selected < 0 || m.selected >= len(m.profilesVisible) {
 		return "", false
 	}
-	return m.profiles[m.selected].Name, true
+	return m.profilesVisible[m.selected].Name, true
 }
 
 func (m model) selectedProfileInfo() (profile.ProfileInfo, bool) {
-	if m.selected < 0 || m.selected >= len(m.profiles) {
+	if m.selected < 0 || m.selected >= len(m.profilesVisible) {
 		return profile.ProfileInfo{}, false
 	}
-	return m.profiles[m.selected], true
+	return m.profilesVisible[m.selected], true
 }
 
 func (m *model) resizeViewport() {
-	reserved := 4
+	reserved := 3
 	if m.height-reserved < 1 {
 		m.viewport.height = 1
 	} else {

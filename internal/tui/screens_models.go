@@ -23,10 +23,6 @@ func (m model) viewModels() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Model Picker: %s\n", m.modelTargetAgent)
 	fmt.Fprintf(&b, "Search: %s\n\n", m.modelSearch)
-	if m.modelStatus != "" {
-		b.WriteString(hintStyle.Render(m.modelStatus))
-		b.WriteString("\n\n")
-	}
 	if len(m.modelFiltered) == 0 {
 		b.WriteString("  (none)\n")
 	} else {
@@ -42,13 +38,17 @@ func (m model) viewModels() string {
 			fmt.Fprintln(&b, line)
 		}
 	}
-	b.WriteString("\n")
-	b.WriteString(hintStyle.Render("enter select · R refresh · esc cancel · j/k/arrows move · type to filter"))
-	b.WriteString("\n")
 	return b.String()
 }
 
 func (m model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if isCtrlU(msg) {
+		if m.modelSearch != "" {
+			m.modelSearch = ""
+			m.updateModelFilter()
+		}
+		return m, nil
+	}
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.screen = screenAgents
@@ -66,7 +66,7 @@ func (m model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyRunes:
 		if string(msg.Runes) == "R" {
-			m.modelStatus = "Refreshing models..."
+			m.setStatus(statusKindInfo, "Refreshing models...")
 			return m, m.refreshModelsCmd(true)
 		}
 		m.modelSearch += string(msg.Runes)
@@ -85,14 +85,14 @@ func (m model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m model) selectModel() (tea.Model, tea.Cmd) {
 	if m.modelSelected < 0 || m.modelSelected >= len(m.modelFiltered) {
-		m.agentsStatus = "No model selected."
+		m.setStatus(statusKindError, "No model selected.")
 		m.screen = screenAgents
 		return m, nil
 	}
 	modelName := m.modelFiltered[m.modelSelected]
 	changed, err := profile.SetAgentModel(m.agentsConfig, m.modelTargetAgent, modelName)
 	if err != nil {
-		m.agentsStatus = err.Error()
+		m.setStatus(statusKindError, err.Error())
 		m.screen = screenAgents
 		return m, nil
 	}

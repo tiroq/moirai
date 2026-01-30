@@ -64,8 +64,17 @@ func TestProfilesApplyTriggersApply(t *testing.T) {
 
 	m := newModelWithActions("/config", false, profiles, "beta", true, actions)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatalf("expected no command before confirmation")
+	}
+	m = updated.(model)
+	if !m.confirm.Open {
+		t.Fatalf("expected confirm to open")
+	}
+
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
 	if cmd == nil {
-		t.Fatalf("expected apply command")
+		t.Fatalf("expected apply command after confirmation")
 	}
 	msg := cmd()
 	updated, _ = updated.(model).Update(msg)
@@ -73,7 +82,7 @@ func TestProfilesApplyTriggersApply(t *testing.T) {
 	if !called {
 		t.Fatalf("expected apply to be called")
 	}
-	if m.status == "" {
+	if m.status.Message == "" {
 		t.Fatalf("expected status after apply")
 	}
 }
@@ -95,6 +104,13 @@ func TestApplyRefreshesActiveProfile(t *testing.T) {
 
 	m := newModelWithActions("/config", false, profiles, "", false, actions)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatalf("expected no command before confirmation")
+	}
+	updated, cmd = updated.(model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	if cmd == nil {
+		t.Fatalf("expected apply command after confirmation")
+	}
 	msg := cmd()
 	updated, _ = updated.(model).Update(msg)
 	m = updated.(model)
@@ -175,6 +191,96 @@ func TestModelUpdateQuit(t *testing.T) {
 	msg := cmd()
 	if _, ok := msg.(tea.QuitMsg); !ok {
 		t.Fatalf("expected quit message, got %T", msg)
+	}
+}
+
+func TestHelpOverlayTogglesAndBlocksMovement(t *testing.T) {
+	profiles := []profile.ProfileInfo{
+		{Name: "alpha"},
+		{Name: "beta"},
+	}
+	m := newModelWithActions("/config", false, profiles, "", false, stubActions())
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	m = updated.(model)
+	if !m.helpOpen {
+		t.Fatalf("expected help overlay open")
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m = updated.(model)
+	if m.selected != 0 {
+		t.Fatalf("expected selection unchanged while help open, got %d", m.selected)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	m = updated.(model)
+	if m.helpOpen {
+		t.Fatalf("expected help overlay closed")
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m = updated.(model)
+	if m.selected != 1 {
+		t.Fatalf("expected selected 1 after down, got %d", m.selected)
+	}
+}
+
+func TestProfilesFilterReducesVisibleAndEnterExitsFilterMode(t *testing.T) {
+	profiles := []profile.ProfileInfo{
+		{Name: "alpha"},
+		{Name: "beta"},
+		{Name: "gamma"},
+	}
+	m := newModelWithActions("/config", false, profiles, "", false, stubActions())
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m = updated.(model)
+	if !m.profileFilterMode {
+		t.Fatalf("expected filter mode on")
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ga")})
+	m = updated.(model)
+	if len(m.profilesVisible) != 1 || m.profilesVisible[0].Name != "gamma" {
+		t.Fatalf("expected only gamma visible, got %v", m.profilesVisible)
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatalf("expected no command when leaving filter mode")
+	}
+	m = updated.(model)
+	if m.profileFilterMode {
+		t.Fatalf("expected filter mode off after enter")
+	}
+	if m.confirm.Open {
+		t.Fatalf("expected no confirm when leaving filter mode")
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(model)
+	if !m.confirm.Open {
+		t.Fatalf("expected confirm to open when pressing enter outside filter mode")
+	}
+}
+
+func TestStatusClearsOnNextAction(t *testing.T) {
+	profiles := []profile.ProfileInfo{{Name: "alpha"}}
+	actions := stubActions()
+	actions.activeProfile = func(_ string) (string, bool, error) { return "alpha", true, nil }
+	m := newModelWithActions("/config", false, profiles, "", false, actions)
+
+	updated, _ := m.Update(applyResultMsg{profile: "alpha"})
+	m = updated.(model)
+	if m.status.Kind != statusKindSuccess || m.status.Message == "" {
+		t.Fatalf("expected success status, got kind=%v msg=%q", m.status.Kind, m.status.Message)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m = updated.(model)
+	if m.status.Message != "" {
+		t.Fatalf("expected status cleared on next key, got %q", m.status.Message)
 	}
 }
 

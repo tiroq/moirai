@@ -3,6 +3,10 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"moirai/internal/profile"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m model) viewProfiles() string {
@@ -13,11 +17,14 @@ func (m model) viewProfiles() string {
 	} else {
 		b.WriteString("Active: (none)\n")
 	}
+	if m.profileFilterMode || m.profileFilter != "" {
+		fmt.Fprintf(&b, "Filter: %s\n", m.profileFilter)
+	}
 	b.WriteString("\nProfiles:\n")
-	if len(m.profiles) == 0 {
+	if len(m.profilesVisible) == 0 {
 		b.WriteString("  (none)\n")
 	} else {
-		for i, profileInfo := range m.profiles {
+		for i, profileInfo := range m.profilesVisible {
 			prefix := "  "
 			isSelected := i == m.selected
 			if isSelected {
@@ -35,13 +42,104 @@ func (m model) viewProfiles() string {
 		}
 	}
 
-	b.WriteString("\n")
-	if m.status != "" {
-		b.WriteString(hintStyle.Render(m.status))
-		b.WriteString("\n")
-	}
-	b.WriteString(hintStyle.Render("enter apply · e agents · b backups · d diff · q/esc/ctrl+c quit · j/k/arrows move"))
-	b.WriteString("\n")
-
 	return b.String()
+}
+
+func (m model) handleProfilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+
+	if m.profileFilterMode {
+		if isCtrlU(msg) {
+			m.profileFilter = ""
+			m.updateProfilesFilter()
+			return m, nil
+		}
+		switch msg.Type {
+		case tea.KeyEsc:
+			m.profileFilterMode = false
+			return m, nil
+		case tea.KeyEnter:
+			m.profileFilterMode = false
+			return m, nil
+		case tea.KeyBackspace, tea.KeyDelete:
+			if m.profileFilter != "" {
+				runes := []rune(m.profileFilter)
+				if len(runes) > 0 {
+					m.profileFilter = string(runes[:len(runes)-1])
+					m.updateProfilesFilter()
+				}
+			}
+			return m, nil
+		case tea.KeyRunes:
+			m.profileFilter += string(msg.Runes)
+			m.updateProfilesFilter()
+			return m, nil
+		}
+
+		switch key {
+		case "j", "down":
+			m.moveSelection(1)
+		case "k", "up":
+			m.moveSelection(-1)
+		}
+		return m, nil
+	}
+
+	switch key {
+	case "esc":
+		return m, tea.Quit
+	case "/":
+		m.profileFilterMode = true
+		return m, nil
+	case "j", "down":
+		m.moveSelection(1)
+	case "k", "up":
+		m.moveSelection(-1)
+	case "enter":
+		return m.confirmApplySelected()
+	case "e":
+		return m.openAgents()
+	case "b":
+		return m.openBackups()
+	case "d":
+		return m.openDiff(diffModeLastBackup)
+	}
+	return m, nil
+}
+
+func (m *model) updateProfilesFilter() {
+	selectedName := ""
+	if m.selected >= 0 && m.selected < len(m.profilesVisible) {
+		selectedName = m.profilesVisible[m.selected].Name
+	}
+	if m.profileFilter == "" {
+		m.profilesVisible = append([]profile.ProfileInfo(nil), m.profiles...)
+	} else {
+		lowered := strings.ToLower(m.profileFilter)
+		visible := make([]profile.ProfileInfo, 0, len(m.profiles))
+		for _, info := range m.profiles {
+			if strings.Contains(strings.ToLower(info.Name), lowered) {
+				visible = append(visible, info)
+			}
+		}
+		m.profilesVisible = visible
+	}
+
+	if len(m.profilesVisible) == 0 {
+		m.selected = -1
+		return
+	}
+	if selectedName == "" {
+		if m.selected < 0 || m.selected >= len(m.profilesVisible) {
+			m.selected = 0
+		}
+		return
+	}
+	for i, info := range m.profilesVisible {
+		if info.Name == selectedName {
+			m.selected = i
+			return
+		}
+	}
+	m.selected = 0
 }

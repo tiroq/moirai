@@ -30,10 +30,10 @@ func TestModelPickerUsesCacheAndSkipsRefreshWhenTTLValid(t *testing.T) {
 	}
 
 	m := model{
-		screen:        screenAgents,
-		agentsEntries: []agentEntry{{Name: "sisyphus"}},
+		screen:         screenAgents,
+		agentsEntries:  []agentEntry{{Name: "sisyphus"}},
 		agentsSelected: 0,
-		actions:       normalizeActions(stubActions()),
+		actions:        normalizeActions(stubActions()),
 	}
 	m.actions.loadModels = loadModelList
 
@@ -55,10 +55,10 @@ func TestModelPickerFallsBackToDefaultWhenCacheMissing(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 
 	m := model{
-		screen:        screenAgents,
-		agentsEntries: []agentEntry{{Name: "sisyphus"}},
+		screen:         screenAgents,
+		agentsEntries:  []agentEntry{{Name: "sisyphus"}},
 		agentsSelected: 0,
-		actions:       normalizeActions(stubActions()),
+		actions:        normalizeActions(stubActions()),
 	}
 	m.actions.loadModels = loadModelList
 
@@ -91,10 +91,10 @@ func TestModelPickerSchedulesRefreshWhenCacheOldAndAppliesUpdate(t *testing.T) {
 	defer restore()
 
 	m := model{
-		screen:        screenAgents,
-		agentsEntries: []agentEntry{{Name: "sisyphus"}},
+		screen:         screenAgents,
+		agentsEntries:  []agentEntry{{Name: "sisyphus"}},
 		agentsSelected: 0,
-		actions:       normalizeActions(stubActions()),
+		actions:        normalizeActions(stubActions()),
 	}
 	m.actions.loadModels = loadModelList
 
@@ -145,12 +145,12 @@ func TestModelPickerManualRefreshKeyIsNonBlocking(t *testing.T) {
 	defer restore()
 
 	m := model{
-		screen:          screenModels,
-		modelAll:        []string{"cached"},
-		modelFiltered:   []string{"cached"},
-		modelSelected:   0,
+		screen:           screenModels,
+		modelAll:         []string{"cached"},
+		modelFiltered:    []string{"cached"},
+		modelSelected:    0,
 		modelTargetAgent: "sisyphus",
-		actions:         normalizeActions(stubActions()),
+		actions:          normalizeActions(stubActions()),
 	}
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
@@ -167,5 +167,25 @@ func TestModelPickerManualRefreshKeyIsNonBlocking(t *testing.T) {
 	_ = cmd()
 	if !called {
 		t.Fatalf("expected runner to be called when cmd executes")
+	}
+}
+
+func TestModelPickerCtrlUClearsSearch(t *testing.T) {
+	m := model{
+		screen:        screenModels,
+		modelAll:      []string{"gpt-4o-mini", "gpt-4o"},
+		modelSearch:   "gpt-4o",
+		modelFiltered: []string{"gpt-4o-mini", "gpt-4o"},
+		modelSelected: 0,
+		actions:       normalizeActions(stubActions()),
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0x15}})
+	got := updated.(model)
+	if got.modelSearch != "" {
+		t.Fatalf("expected search cleared, got %q", got.modelSearch)
+	}
+	if joined := strings.Join(got.modelFiltered, ","); joined != "gpt-4o-mini,gpt-4o" {
+		t.Fatalf("expected all models visible after clear, got %q", joined)
 	}
 }

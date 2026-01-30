@@ -15,8 +15,5 @@ func (m model) viewBackups() string {
 			fmt.Fprintf(&b, "  %s\n", name)
 		}
 	}
-	b.WriteString("\n")
-	b.WriteString(hintStyle.Render("esc back · q quit"))
-	b.WriteString("\n")
 	return b.String()
 }

@@ -44,20 +44,13 @@ func (m model) viewAgents() string {
 			fmt.Fprintln(&b, line)
 		}
 	}
-	b.WriteString("\n")
-	if m.agentsStatus != "" {
-		b.WriteString(hintStyle.Render(m.agentsStatus))
-		b.WriteString("\n")
-	}
-	b.WriteString(hintStyle.Render("enter model · s save · r reload · a autofill · esc back · q quit · j/k/arrows move"))
-	b.WriteString("\n")
 	return b.String()
 }
 
 func (m model) openAgents() (tea.Model, tea.Cmd) {
 	info, ok := m.selectedProfileInfo()
 	if !ok {
-		m.status = "No profiles available."
+		m.setStatus(statusKindError, "No profiles available.")
 		return m, nil
 	}
 	return m, func() tea.Msg {
@@ -68,7 +61,7 @@ func (m model) openAgents() (tea.Model, tea.Cmd) {
 
 func (m model) reloadAgents() (tea.Model, tea.Cmd) {
 	if m.agentsProfile.Path == "" {
-		m.agentsStatus = "No profile loaded."
+		m.setStatus(statusKindError, "No profile loaded.")
 		return m, nil
 	}
 	return m, func() tea.Msg {
@@ -79,11 +72,11 @@ func (m model) reloadAgents() (tea.Model, tea.Cmd) {
 
 func (m model) saveAgents() (tea.Model, tea.Cmd) {
 	if !m.agentsDirty {
-		m.agentsStatus = "No changes to save."
+		m.setStatus(statusKindInfo, "No changes to save.")
 		return m, nil
 	}
 	if m.agentsProfile.Name == "" || m.agentsProfile.Path == "" {
-		m.agentsStatus = "No profile loaded."
+		m.setStatus(statusKindError, "No profile loaded.")
 		return m, nil
 	}
 	cfg := m.agentsConfig
@@ -98,18 +91,32 @@ func (m model) saveAgents() (tea.Model, tea.Cmd) {
 	}
 }
 
+func (m model) confirmSaveAgents() (tea.Model, tea.Cmd) {
+	if !m.agentsDirty {
+		return m.saveAgents()
+	}
+	if m.agentsProfile.Name == "" {
+		return m.saveAgents()
+	}
+	prompt := fmt.Sprintf("Save changes to '%s'? (y/n)", m.agentsProfile.Name)
+	m.openConfirm(prompt, func(m model) (tea.Model, tea.Cmd) {
+		return m.saveAgents()
+	})
+	return m, nil
+}
+
 func (m model) autofillAgents() (tea.Model, tea.Cmd) {
 	if !m.enableAutofill {
-		m.agentsStatus = "Autofill disabled. Run with --enable-autofill."
+		m.setStatus(statusKindError, "Autofill disabled. Run with --enable-autofill.")
 		return m, nil
 	}
 	if m.agentsProfile.Name == "" || m.agentsProfile.Path == "" {
-		m.agentsStatus = "No profile loaded."
+		m.setStatus(statusKindError, "No profile loaded.")
 		return m, nil
 	}
 	preset, ok := profile.PresetByName("openai")
 	if !ok {
-		m.agentsStatus = "Autofill preset unavailable."
+		m.setStatus(statusKindError, "Autofill preset unavailable.")
 		return m, nil
 	}
 	known := profile.KnownAgents()
@@ -134,16 +141,33 @@ func (m model) autofillAgents() (tea.Model, tea.Cmd) {
 	}
 }
 
+func (m model) confirmAutofillAgents() (tea.Model, tea.Cmd) {
+	if !m.enableAutofill {
+		return m.autofillAgents()
+	}
+	if m.agentsProfile.Name == "" || m.agentsProfile.Path == "" {
+		return m.autofillAgents()
+	}
+	if _, ok := profile.PresetByName("openai"); !ok {
+		return m.autofillAgents()
+	}
+	presetName := "openai"
+	prompt := fmt.Sprintf("Autofill missing agents using preset '%s' and save? (y/n)", presetName)
+	m.openConfirm(prompt, func(m model) (tea.Model, tea.Cmd) {
+		return m.autofillAgents()
+	})
+	return m, nil
+}
+
 func (m model) openModelPicker() (tea.Model, tea.Cmd) {
 	agent, ok := m.selectedAgent()
 	if !ok {
-		m.agentsStatus = "No agents available."
+		m.setStatus(statusKindError, "No agents available.")
 		return m, nil
 	}
 	m.modelTargetAgent = agent.Name
 	m.modelAll = m.actions.loadModels()
 	m.modelSearch = ""
-	m.modelStatus = ""
 	m.modelFiltered = filterModelList(m.modelAll, m.modelSearch)
 	if len(m.modelFiltered) == 0 {
 		m.modelSelected = -1
@@ -153,14 +177,14 @@ func (m model) openModelPicker() (tea.Model, tea.Cmd) {
 	m.screen = screenModels
 	cmd := m.refreshModelsCmd(false)
 	if cmd != nil {
-		m.modelStatus = "Refreshing models..."
+		m.setStatus(statusKindInfo, "Refreshing models...")
 	}
 	return m, cmd
 }
 
 func (m model) handleAgentsLoad(msg agentsLoadMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.status = msg.err.Error()
+		m.setStatus(statusKindError, msg.err.Error())
 		return m, nil
 	}
 	m.screen = screenAgents
@@ -173,23 +197,22 @@ func (m model) handleAgentsLoad(msg agentsLoadMsg) (tea.Model, tea.Cmd) {
 		m.agentsSelected = 0
 	}
 	m.agentsDirty = false
-	m.agentsStatus = ""
 	return m, nil
 }
 
 func (m model) handleAgentsSave(msg agentsSaveMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.agentsStatus = msg.err.Error()
+		m.setStatus(statusKindError, msg.err.Error())
 		return m, nil
 	}
 	m.agentsDirty = false
-	m.agentsStatus = "Saved"
+	m.setStatus(statusKindSuccess, "Saved")
 	return m, nil
 }
 
 func (m model) handleAgentsAutofill(msg agentsAutofillMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.agentsStatus = msg.err.Error()
+		m.setStatus(statusKindError, msg.err.Error())
 		if msg.changed {
 			m.agentsDirty = true
 			m.agentsEntries = collectAgentEntries(m.agentsConfig, profile.KnownAgents())
@@ -197,12 +220,12 @@ func (m model) handleAgentsAutofill(msg agentsAutofillMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 	if !msg.changed {
-		m.agentsStatus = "No missing models to autofill."
+		m.setStatus(statusKindInfo, "No missing models to autofill.")
 		return m, nil
 	}
 	m.agentsEntries = collectAgentEntries(m.agentsConfig, profile.KnownAgents())
 	m.agentsDirty = !msg.saved
-	m.agentsStatus = fmt.Sprintf("Autofilled %d agents", msg.filled)
+	m.setStatus(statusKindSuccess, fmt.Sprintf("Autofilled %d agents", msg.filled))
 	return m, nil
 }
 

@@ -187,8 +187,17 @@ func TestAgentsSaveBacksUpWritesAndClearsDirty(t *testing.T) {
 	}
 
 	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	if cmd != nil {
+		t.Fatalf("expected no command before confirmation")
+	}
+	m = updated.(model)
+	if !m.confirm.Open {
+		t.Fatalf("expected confirm to open for save")
+	}
+
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
 	if cmd == nil {
-		t.Fatalf("expected save command")
+		t.Fatalf("expected save command after confirmation")
 	}
 	msg = cmd()
 	updated, _ = updated.(model).Update(msg)
@@ -203,8 +212,8 @@ func TestAgentsSaveBacksUpWritesAndClearsDirty(t *testing.T) {
 	if m.agentsDirty {
 		t.Fatalf("expected dirty cleared after save")
 	}
-	if m.agentsStatus != "Saved" {
-		t.Fatalf("expected saved status, got %q", m.agentsStatus)
+	if m.status.Message != "Saved" || m.status.Kind != statusKindSuccess {
+		t.Fatalf("expected saved status, got kind=%v msg=%q", m.status.Kind, m.status.Message)
 	}
 }
 
@@ -235,8 +244,11 @@ func TestAgentsAutofillDisabledShowsMessageAndDoesNotWrite(t *testing.T) {
 	if cmd != nil {
 		t.Fatalf("expected no command when autofill is disabled")
 	}
-	if m.agentsStatus != "Autofill disabled. Run with --enable-autofill." {
-		t.Fatalf("unexpected status %q", m.agentsStatus)
+	if m.confirm.Open {
+		t.Fatalf("expected no confirm when autofill is disabled")
+	}
+	if m.status.Message != "Autofill disabled. Run with --enable-autofill." || m.status.Kind != statusKindError {
+		t.Fatalf("unexpected status kind=%v msg=%q", m.status.Kind, m.status.Message)
 	}
 	if backupCalls != 0 || saveCalls != 0 || autofillCalls != 0 {
 		t.Fatalf("expected no writes when disabled, got backup=%d save=%d autofill=%d", backupCalls, saveCalls, autofillCalls)
@@ -270,8 +282,17 @@ func TestAgentsAutofillEnabledFillsAndSaves(t *testing.T) {
 	m = updated.(model)
 
 	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	if cmd != nil {
+		t.Fatalf("expected no command before confirmation")
+	}
+	m = updated.(model)
+	if !m.confirm.Open {
+		t.Fatalf("expected confirm to open for autofill")
+	}
+
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
 	if cmd == nil {
-		t.Fatalf("expected autofill command")
+		t.Fatalf("expected autofill command after confirmation")
 	}
 	msg = cmd()
 	updated, _ = updated.(model).Update(msg)
@@ -289,8 +310,8 @@ func TestAgentsAutofillEnabledFillsAndSaves(t *testing.T) {
 	if m.agentsDirty {
 		t.Fatalf("expected dirty cleared after autofill+save")
 	}
-	if !strings.HasPrefix(m.agentsStatus, "Autofilled ") {
-		t.Fatalf("expected autofill status, got %q", m.agentsStatus)
+	if !strings.HasPrefix(m.status.Message, "Autofilled ") || m.status.Kind != statusKindSuccess {
+		t.Fatalf("expected autofill status, got kind=%v msg=%q", m.status.Kind, m.status.Message)
 	}
 	if got := cfg.Agents["sisyphus"].Model; got == "" {
 		t.Fatalf("expected sisyphus to be filled")
