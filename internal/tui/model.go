@@ -249,7 +249,7 @@ func (m model) View() string {
 		body += "\n\n" + m.renderHelpModal()
 	}
 	body += "\n" + m.renderStatusBar()
-	title := centerStyled("MOIRAI", selectedStyle, m.width)
+	title := renderTitleArt(m.width)
 	return title + "\n" + body + "\n"
 }
 
@@ -489,9 +489,8 @@ func (m model) selectedProfileInfo() (profile.ProfileInfo, bool) {
 }
 
 func (m *model) resizeViewport() {
-	// Reserve 1 line for the app title bar and 1 line for the status bar, plus
-	// 2 lines for the diff screen header spacing.
-	reserved := 4
+	// Reserve title + status, plus 2 lines for the diff screen header spacing.
+	reserved := titleArtHeight() + 1 + 2
 	if m.height-reserved < 1 {
 		m.viewport.height = 1
 	} else {

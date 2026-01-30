@@ -27,7 +27,7 @@ func (m model) viewProfiles() string {
 		pageSize := len(m.profilesVisible)
 		if m.height > 0 {
 			// Keep the overall render within the terminal height so we don't push
-			// the title line into scrollback. Reserve 2 lines for title + status.
+			// the title line into scrollback.
 			//
 			// Header lines here:
 			//   ConfigDir, Active, optional Filter, blank, "Profiles:"
@@ -35,7 +35,7 @@ func (m model) viewProfiles() string {
 			if m.profileFilterMode || m.profileFilter != "" {
 				headerLines = 5
 			}
-			pageSize = m.height - 2 - headerLines
+			pageSize = m.height - (titleArtHeight() + 1) - headerLines
 			if pageSize < 1 {
 				pageSize = 1
 			}

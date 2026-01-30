@@ -27,7 +27,21 @@ func (m model) viewModels() string {
 	if len(m.modelFiltered) == 0 {
 		b.WriteString("  (none)\n")
 	} else {
-		start, end := modelWindow(len(m.modelFiltered), m.modelSelected, modelPageSize)
+		pageSize := modelPageSize
+		if m.height > 0 {
+			// Keep the screen within the terminal height (title + status).
+			// Header lines:
+			//   "Model Picker", "Search", blank, "Showing"
+			headerLines := 4
+			available := m.height - (titleArtHeight() + 1) - headerLines
+			if available < 1 {
+				available = 1
+			}
+			if available < pageSize {
+				pageSize = available
+			}
+		}
+		start, end := modelWindow(len(m.modelFiltered), m.modelSelected, pageSize)
 		fmt.Fprintf(&b, "Showing %d-%d of %d\n\n", start+1, end, len(m.modelFiltered))
 		for i := start; i < end; i++ {
 			modelName := m.modelFiltered[i]

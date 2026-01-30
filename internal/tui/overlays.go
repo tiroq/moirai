@@ -44,6 +44,9 @@ func (m model) renderStatusBar() string {
 	hints := m.statusHints()
 	left := m.status.Message
 	right := ""
+	if hints != "" && m.width > 0 && runeLen(hints) > m.width {
+		hints = truncateRunes(hints, m.width)
+	}
 	if hints != "" {
 		right = hintStyle.Render(hints)
 	}
@@ -101,6 +104,26 @@ func centerStyled(text string, style textStyle, width int) string {
 		padding = 0
 	}
 	return strings.Repeat(" ", padding) + style.Render(text)
+}
+
+var titleArtLines = []string{
+	"▗▖  ▗▖ ▗▄▖ ▗▄▄▄▖▗▄▄▖  ▗▄▖ ▗▄▄▄▖",
+	"▐▛▚▞▜▌▐▌ ▐▌  █  ▐▌ ▐▌▐▌ ▐▌  █  ",
+	"▐▌  ▐▌▐▌ ▐▌  █  ▐▛▀▚▖▐▛▀▜▌  █  ",
+	"▐▌  ▐▌▝▚▄▞▘▗▄█▄▖▐▌ ▐▌▐▌ ▐▌▗▄█▄▖",
+}
+
+func titleArtHeight() int { return len(titleArtLines) }
+
+func renderTitleArt(width int) string {
+	lines := make([]string, 0, len(titleArtLines))
+	for _, line := range titleArtLines {
+		if width > 0 {
+			line = truncateRunes(line, width)
+		}
+		lines = append(lines, centerStyled(line, selectedStyle, width))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func statusTextStyle(kind statusKind) textStyle {
