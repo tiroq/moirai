@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"moirai/internal/profile"
 	"moirai/internal/util"
 )
 
@@ -75,4 +76,94 @@ func ListProfileBackups(dir, profileName string) ([]string, error) {
 		return backups[i] > backups[j]
 	})
 	return backups, nil
+}
+
+// RestoreProfileFromBackup restores the profile file from a backup in dir.
+func RestoreProfileFromBackup(dir, profileName string, from string) (string, error) {
+	if profileName == "" {
+		return "", fmt.Errorf("profile name is required")
+	}
+	if from == "" {
+		return "", fmt.Errorf("backup path is required")
+	}
+
+	profileFile := profilePrefix + profileName
+	profilePath := filepath.Join(dir, profileFile)
+	if _, err := os.Stat(profilePath); err != nil {
+		return "", err
+	}
+
+	backupPath, err := resolveBackupPath(dir, from)
+	if err != nil {
+		return "", err
+	}
+
+	inDir, err := isInConfigDir(backupPath, dir)
+	if err != nil {
+		return "", err
+	}
+	if !inDir {
+		return "", fmt.Errorf("backup must be in config dir")
+	}
+
+	base := filepath.Base(backupPath)
+	prefix := profileFile + backupMarker
+	if !strings.HasPrefix(base, prefix) || len(base) == len(prefix) {
+		return "", fmt.Errorf("backup does not match profile")
+	}
+
+	preBackupPath, err := BackupProfile(dir, profileName)
+	if err != nil {
+		return "", err
+	}
+
+	backupInfo, err := os.Stat(backupPath)
+	if err != nil {
+		return "", err
+	}
+	backupData, err := os.ReadFile(backupPath)
+	if err != nil {
+		return "", err
+	}
+	if err := profile.SaveProfileAtomic(profilePath, backupData, backupInfo.Mode().Perm()); err != nil {
+		return "", err
+	}
+
+	return preBackupPath, nil
+}
+
+func resolveBackupPath(dir, from string) (string, error) {
+	if _, err := os.Stat(from); err == nil {
+		return from, nil
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+
+	candidate := filepath.Join(dir, from)
+	if _, err := os.Stat(candidate); err != nil {
+		return "", err
+	}
+	return candidate, nil
+}
+
+func isInConfigDir(path, dir string) (bool, error) {
+	pathAbs, err := filepath.Abs(path)
+	if err != nil {
+		return false, err
+	}
+	dirAbs, err := filepath.Abs(dir)
+	if err != nil {
+		return false, err
+	}
+
+	pathResolved := pathAbs
+	if resolved, err := filepath.EvalSymlinks(pathAbs); err == nil {
+		pathResolved = resolved
+	}
+	dirResolved := dirAbs
+	if resolved, err := filepath.EvalSymlinks(dirAbs); err == nil {
+		dirResolved = resolved
+	}
+
+	return filepath.Dir(pathResolved) == dirResolved, nil
 }

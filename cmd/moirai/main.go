@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -66,6 +67,21 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "restore":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Usage: moirai restore <profile> --from <backupPathOrFilename>")
+			os.Exit(1)
+		}
+		restoreFlags := flag.NewFlagSet("restore", flag.ContinueOnError)
+		from := restoreFlags.String("from", "", "backup path or filename")
+		if err := restoreFlags.Parse(args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if err := runRestore(args[1], *from); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	default:
 		printHelp()
 		os.Exit(1)
@@ -78,6 +94,7 @@ func printHelp() {
 	fmt.Println("       moirai doctor <profile>")
 	fmt.Println("       moirai backup <profile>")
 	fmt.Println("       moirai backups <profile>")
+	fmt.Println("       moirai restore <profile> --from <backupPathOrFilename>")
 	fmt.Println("       moirai help")
 }
 
@@ -191,5 +208,21 @@ func runBackups(profileName string) error {
 	for _, name := range backups {
 		fmt.Printf(" - %s\n", name)
 	}
+	return nil
+}
+
+func runRestore(profileName, from string) error {
+	configDir, err := util.ExpandUser(defaultConfigDir)
+	if err != nil {
+		return err
+	}
+	configDir = filepath.Clean(configDir)
+
+	preBackupPath, err := backup.RestoreProfileFromBackup(configDir, profileName, from)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Restored: %s\n", profileName)
+	fmt.Printf("PreBackup: %s\n", preBackupPath)
 	return nil
 }

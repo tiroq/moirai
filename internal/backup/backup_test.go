@@ -156,3 +156,178 @@ func TestBackupActiveCopiesContent(t *testing.T) {
 		t.Fatalf("backup content mismatch: %q", string(backupContent))
 	}
 }
+
+func TestRestoreProfileFromBackupWritesContent(t *testing.T) {
+	dir := t.TempDir()
+	profileName := "restore-write"
+	profilePath := filepath.Join(dir, profilePrefix+profileName)
+	original := []byte("original")
+	restored := []byte("restored")
+
+	if err := os.WriteFile(profilePath, original, 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	backupName := profilePrefix + profileName + backupMarker + "20240101-000000"
+	backupPath := filepath.Join(dir, backupName)
+	if err := os.WriteFile(backupPath, restored, 0o600); err != nil {
+		t.Fatalf("write backup: %v", err)
+	}
+
+	if _, err := RestoreProfileFromBackup(dir, profileName, backupName); err != nil {
+		t.Fatalf("RestoreProfileFromBackup: %v", err)
+	}
+
+	updated, err := os.ReadFile(profilePath)
+	if err != nil {
+		t.Fatalf("read profile: %v", err)
+	}
+	if string(updated) != string(restored) {
+		t.Fatalf("profile content mismatch: %q", string(updated))
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".tmp-") {
+			t.Fatalf("unexpected temp file %s", entry.Name())
+		}
+	}
+}
+
+func TestRestoreProfileFromBackupCreatesPreBackup(t *testing.T) {
+	dir := t.TempDir()
+	profileName := "restore-prebackup"
+	profilePath := filepath.Join(dir, profilePrefix+profileName)
+	original := []byte("original")
+	restored := []byte("restored")
+
+	if err := os.WriteFile(profilePath, original, 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	backupName := profilePrefix + profileName + backupMarker + "20240102-000000"
+	backupPath := filepath.Join(dir, backupName)
+	if err := os.WriteFile(backupPath, restored, 0o600); err != nil {
+		t.Fatalf("write backup: %v", err)
+	}
+
+	preBackupPath, err := RestoreProfileFromBackup(dir, profileName, backupName)
+	if err != nil {
+		t.Fatalf("RestoreProfileFromBackup: %v", err)
+	}
+
+	base := filepath.Base(preBackupPath)
+	expectedPrefix := profilePrefix + profileName + backupMarker
+	if !strings.HasPrefix(base, expectedPrefix) {
+		t.Fatalf("expected prefix %s in %s", expectedPrefix, base)
+	}
+
+	preBackupContent, err := os.ReadFile(preBackupPath)
+	if err != nil {
+		t.Fatalf("read pre-backup: %v", err)
+	}
+	if string(preBackupContent) != string(original) {
+		t.Fatalf("pre-backup content mismatch: %q", string(preBackupContent))
+	}
+}
+
+func TestRestoreProfileFromBackupRejectsWrongPrefix(t *testing.T) {
+	dir := t.TempDir()
+	profileName := "restore-prefix"
+	profilePath := filepath.Join(dir, profilePrefix+profileName)
+
+	if err := os.WriteFile(profilePath, []byte("profile"), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	backupName := profilePrefix + "other" + backupMarker + "20240103-000000"
+	if err := os.WriteFile(filepath.Join(dir, backupName), []byte("backup"), 0o600); err != nil {
+		t.Fatalf("write backup: %v", err)
+	}
+
+	if _, err := RestoreProfileFromBackup(dir, profileName, backupName); err == nil {
+		t.Fatal("expected error for mismatched backup prefix")
+	}
+}
+
+func TestRestoreProfileFromBackupRequiresFrom(t *testing.T) {
+	dir := t.TempDir()
+	profileName := "restore-missing-from"
+	profilePath := filepath.Join(dir, profilePrefix+profileName)
+
+	if err := os.WriteFile(profilePath, []byte("profile"), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	if _, err := RestoreProfileFromBackup(dir, profileName, ""); err == nil {
+		t.Fatal("expected error for empty backup path")
+	}
+}
+
+func TestRestoreProfileFromBackupRejectsMissingBackup(t *testing.T) {
+	dir := t.TempDir()
+	profileName := "restore-missing-backup"
+	profilePath := filepath.Join(dir, profilePrefix+profileName)
+
+	if err := os.WriteFile(profilePath, []byte("profile"), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	if _, err := RestoreProfileFromBackup(dir, profileName, "missing.bak"); err == nil {
+		t.Fatal("expected error for missing backup")
+	}
+}
+
+func TestRestoreProfileFromBackupRejectsBackupOutsideConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	otherDir := t.TempDir()
+	profileName := "restore-outside"
+	profilePath := filepath.Join(dir, profilePrefix+profileName)
+
+	if err := os.WriteFile(profilePath, []byte("profile"), 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	backupName := profilePrefix + profileName + backupMarker + "20240104-000000"
+	backupPath := filepath.Join(otherDir, backupName)
+	if err := os.WriteFile(backupPath, []byte("backup"), 0o600); err != nil {
+		t.Fatalf("write backup: %v", err)
+	}
+
+	if _, err := RestoreProfileFromBackup(dir, profileName, backupPath); err == nil {
+		t.Fatal("expected error for backup outside config dir")
+	}
+}
+
+func TestRestoreProfileFromBackupWithAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	profileName := "restore-absolute"
+	profilePath := filepath.Join(dir, profilePrefix+profileName)
+	original := []byte("original")
+	restored := []byte("restored")
+
+	if err := os.WriteFile(profilePath, original, 0o600); err != nil {
+		t.Fatalf("write profile: %v", err)
+	}
+
+	backupName := profilePrefix + profileName + backupMarker + "20240105-000000"
+	backupPath := filepath.Join(dir, backupName)
+	if err := os.WriteFile(backupPath, restored, 0o600); err != nil {
+		t.Fatalf("write backup: %v", err)
+	}
+
+	if _, err := RestoreProfileFromBackup(dir, profileName, backupPath); err != nil {
+		t.Fatalf("RestoreProfileFromBackup: %v", err)
+	}
+
+	updated, err := os.ReadFile(profilePath)
+	if err != nil {
+		t.Fatalf("read profile: %v", err)
+	}
+	if string(updated) != string(restored) {
+		t.Fatalf("profile content mismatch: %q", string(updated))
+	}
+}
