@@ -57,6 +57,20 @@ func (m model) renderStatusBar() string {
 		return statusTextStyle(m.status.Kind).Render(left) + " " + right
 	}
 
+	// Default/idle state: no status message. Show hints centered to make them
+	// easier to discover.
+	if left == "" {
+		hintWidth := runeLen(hints)
+		if hintWidth <= 0 {
+			return ""
+		}
+		padding := (m.width - hintWidth) / 2
+		if padding < 0 {
+			padding = 0
+		}
+		return strings.Repeat(" ", padding) + right
+	}
+
 	rightWidth := runeLen(hints)
 	maxLeft := m.width - rightWidth - 1
 	if maxLeft < 0 {
@@ -211,22 +225,22 @@ func (m model) statusHints() string {
 		return "y yes · n no · esc cancel · q quit"
 	}
 	if m.helpOpen {
-		return "?/esc close · q quit"
+		return "esc close · q quit"
 	}
 	switch m.screen {
 	case screenBackups:
-		return "? help · esc back · q quit"
+		return "esc back · ? help · q quit"
 	case screenDiff:
-		return "? help · esc back · j/k/pg scroll · q quit"
+		return "j/k scroll · pgup/pgdown page · a/d diff mode · esc back · ? help · q quit"
 	case screenAgents:
-		return "? help · esc back · q quit"
+		return "j/k move · enter models · s save · r reload · a autofill · esc back · ? help · q quit"
 	case screenModels:
-		return "? help · ctrl+u clear · esc cancel · q quit"
+		return "type search · ctrl+u clear · j/k move · pgup/pgdown page · enter select · R refresh · esc cancel · ? help · q quit"
 	default:
 		if m.profileFilterMode {
-			return "? help · enter done · ctrl+u clear · q quit"
+			return "type filter · ctrl+u clear · enter done · esc cancel · j/k move · ? help · q quit"
 		}
-		return "? help · / filter · q quit"
+		return "j/k move · / filter · enter apply · e agents · b backups · d diff · ? help · q quit"
 	}
 }
 
