@@ -34,6 +34,19 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "doctor":
+		if len(args) != 2 {
+			fmt.Fprintln(os.Stderr, "Usage: moirai doctor <profile>")
+			os.Exit(1)
+		}
+		exitCode, err := runDoctor(args[1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
 	default:
 		printHelp()
 		os.Exit(1)
@@ -43,6 +56,7 @@ func main() {
 func printHelp() {
 	fmt.Println("Usage: moirai list")
 	fmt.Println("       moirai apply <profile>")
+	fmt.Println("       moirai doctor <profile>")
 	fmt.Println("       moirai help")
 }
 
@@ -92,4 +106,31 @@ func runApply(profileName string) error {
 	}
 	fmt.Printf("Applied: %s\n", profileName)
 	return nil
+}
+
+func runDoctor(profileName string) (int, error) {
+	configDir, err := util.ExpandUser(defaultConfigDir)
+	if err != nil {
+		return 1, err
+	}
+	configDir = filepath.Clean(configDir)
+
+	profilePath := filepath.Join(configDir, fmt.Sprintf("oh-my-opencode.json.%s", profileName))
+	cfg, err := profile.LoadProfile(profilePath)
+	if err != nil {
+		return 1, err
+	}
+
+	missing := profile.MissingAgents(cfg, profile.KnownAgents())
+
+	fmt.Printf("Profile: %s\n", profileName)
+	fmt.Println("Missing:")
+	if len(missing) == 0 {
+		fmt.Println(" (none)")
+		return 0, nil
+	}
+	for _, agent := range missing {
+		fmt.Printf(" - %s\n", agent)
+	}
+	return 2, nil
 }
