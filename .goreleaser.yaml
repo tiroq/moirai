@@ -1,0 +1,20 @@
+version: 2
+
+builds:
+  - id: moirai
+    main: ./cmd/moirai
+    binary: moirai
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -X moirai/internal/app.Version={{.Version}}
+
+archives:
+  - format: tar.gz
+
+checksum:
+  name_template: checksums.txt
