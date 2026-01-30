@@ -72,4 +72,3 @@ func parseModels(data []byte) []string {
 	sort.Strings(models)
 	return models
 }
-

@@ -48,4 +48,3 @@ func TestListModelsErrorsOnEmptyOutput(t *testing.T) {
 		t.Fatalf("expected error")
 	}
 }
-

@@ -108,4 +108,3 @@ func TestCacheAgeUsesModTime(t *testing.T) {
 		t.Fatalf("expected age ~48h, got %v", age)
 	}
 }
-
